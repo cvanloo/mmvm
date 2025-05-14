@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"errors"
 	//"encoding/binary" // @todo: do the parsing properly
 )
 
@@ -45,7 +46,12 @@ type (
 
 const (
 	OpMovRegRm Operation = iota
+	OpMovRmImm
 	OpMovRegImm
+	OpMovAccMem
+	OpMovMemAcc
+	OpMovSegRm
+	OpMovRmSeg
 	OpAddRegRm
 	OpIntType3
 	OpIntTypeSpecified
@@ -57,8 +63,18 @@ func (op Operation) Description() string {
 		panic("unknown operation")
 	case OpMovRegRm:
 		return "MOV Register/Memory to/from Register"
+	case OpMovRmImm:
+		return "MOV Immediate to Register/Memory"
 	case OpMovRegImm:
 		return "MOV Immediate to Register"
+	case OpMovAccMem:
+		return "MOV Memory to Accumulator"
+	case OpMovMemAcc:
+		return "MOV Accumulator to Memory"
+	case OpMovSegRm:
+		return "MOV Register/Memory to Segment Register"
+	case OpMovRmSeg:
+		return "MOV Segment Register to Register/Memory"
 	case OpAddRegRm:
 		return "ADD Register/Memory with Register to Either"
 	case OpIntType3:
@@ -72,7 +88,8 @@ func (op Operation) String() string {
 	switch op {
 	default:
 		panic("unknown operation")
-	case OpMovRegRm, OpMovRegImm:
+
+	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovSegRm, OpMovRmSeg:
 		return "mov"
 	case OpAddRegRm:
 		return "add"
@@ -143,7 +160,9 @@ func decode(text []byte) (insts []Instruction, err error) {
 		offset := i
 		i1 := text[i]; i++
 		switch {
-		case (i1 & 0b11111100) == 0b10001000: // MOV REG R/M
+		default:
+			err = errors.Join(err, fmt.Errorf("unrecognized instruction: %x", i1))
+		case (i1 & 0b11111100) == 0b10001000:
 			i2 := text[i]; i++
 			d := (i1 & 0b00000010) >> 1
 			w := i1 & 0b00000001 // w == 0 -> byte, w == 1 -> word (copy 2 bytes at once)
@@ -170,7 +189,38 @@ func decode(text []byte) (insts []Instruction, err error) {
 				inst.operands = Operands{opReg, opRM}
 			}
 			insts = append(insts, inst)
-		case (i1 & 0b11110000) == 0b10110000: // MOV REG, IMM8/IMM16
+		case (i1 & 0b11111110) == 0b11000110:
+			i2 := text[i]; i++
+			i3 := text[i]; i++
+			i4 := byte(0)
+			w := i1 & 0b1
+			data := int16(i3)
+			if w == 1 {
+				i4 = text[i]; i++
+				data = (int16(i4) << 8) ^ data
+			}
+			mod := (i2 & 0b11000000) >> 6
+			if (i2 & 0b00111000) != 0 {
+				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
+			}
+			rm := i2 & 0b111
+			var opRm Operand
+			if mod == 0b11 {
+				opRm = Register{name: rm, width: w}
+			} else {
+				opRm = Memory{mod: mod, rm: rm}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,i3,i4},
+				operation: OpMovRmImm,
+				operands: Operands{
+					opRm,
+					Immediate{width: w, value: data},
+				},
+			})
+		case (i1 & 0b11110000) == 0b10110000:
 			i2 := text[i]; i++
 			i3 := byte(0)
 			w := (i1 & 0b00001000) >> 3
@@ -190,7 +240,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Immediate{width: w, value: data},
 				},
 			})
-		case (i1 & 0b11111100) == 0: // ADD REG R/M
+		case (i1 & 0b11111100) == 0:
 			i2 := text[i]; i++
 			d := (i1 & 0b00000010) >> 1
 			w := i1 & 0b00000001
@@ -217,7 +267,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				inst.operands = Operands{opReg, opRM}
 			}
 			insts = append(insts, inst)
-		case i1 == 0b11001100: // INT (TYPE 3)
+		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
@@ -225,7 +275,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operation: OpIntType3,
 				operands: nil,
 			})
-		case i1 == 0b11001101: // INT TYPE
+		case i1 == 0b11001101:
 			i2 := text[i]; i++
 			insts = append(insts, Instruction {
 				offset: offset,
