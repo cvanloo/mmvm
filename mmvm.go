@@ -35,13 +35,34 @@ type (
 	Register struct {
 		name, width byte
 	}
+	// Relative
 	Memory struct {
 		mod, rm, dispHigh, dispLow byte
+	}
+	// Absolute
+	Address struct {
+		width byte
+		addr int16
 	}
 	Immediate struct {
 		width byte
 		value int16
 	}
+)
+
+const (
+	RegA byte = iota
+	RegC
+	RegD
+	RegB
+	RegSP
+	RegBP
+	RegSI
+	RegDI
+	RegAH = RegSP
+	RegCH = RegBP
+	RegDH = RegSI
+	RegBH = RegDI
 )
 
 const (
@@ -143,6 +164,14 @@ func (mem Memory) AsmString() string {
 	}
 }
 
+func (addr Address) String() string {
+	return addr.AsmString()
+}
+
+func (addr Address) AsmString() string {
+	return fmt.Sprintf("[%04x]", addr.addr)
+}
+
 func (imm Immediate) String() string {
 	return imm.AsmString()
 }
@@ -240,6 +269,21 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Immediate{width: w, value: data},
 				},
 			})
+		case (i1 & 0b11111110) == 0b10100000:
+			i2 := text[i]; i++
+			i3 := text[i]; i++
+			w := i1 & 0b1
+			addr := (int16(i3) << 8) ^ int16(i2)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,i3,0},
+				operation: OpMovAccMem,
+				operands: Operands{
+					Register{name: RegA, width: w},
+					Address{width: w, addr: addr},
+				},
+			})
 		case (i1 & 0b11111100) == 0:
 			i2 := text[i]; i++
 			d := (i1 & 0b00000010) >> 1
@@ -297,7 +341,7 @@ func must[T any](t T, err error) T {
 }
 
 func main() {
-	bin := must(os.ReadFile("a.out"))
+	bin := must(os.ReadFile("a2.out"))
 	exec := *(*Exec)(unsafe.Pointer(&bin[0]))
 	fmt.Printf("%#v\n", exec)
 	text := bin[32:32+exec.sizeText]
