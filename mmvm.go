@@ -35,6 +35,9 @@ type (
 	Register struct {
 		name, width byte
 	}
+	Segment struct {
+		name byte
+	}
 	// Relative
 	Memory struct {
 		mod, rm, dispHigh, dispLow byte
@@ -71,7 +74,6 @@ const (
 	OpMovRegImm
 	OpMovAccMem
 	OpMovMemAcc
-	OpMovSegRm
 	OpMovRmSeg
 	OpAddRegRm
 	OpIntType3
@@ -92,10 +94,8 @@ func (op Operation) Description() string {
 		return "MOV Memory to Accumulator"
 	case OpMovMemAcc:
 		return "MOV Accumulator to Memory"
-	case OpMovSegRm:
-		return "MOV Register/Memory to Segment Register"
 	case OpMovRmSeg:
-		return "MOV Segment Register to Register/Memory"
+		return "MOV Register/Memory to/from Segment Register"
 	case OpAddRegRm:
 		return "ADD Register/Memory with Register to Either"
 	case OpIntType3:
@@ -110,7 +110,7 @@ func (op Operation) String() string {
 	default:
 		panic("unknown operation")
 
-	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovSegRm, OpMovRmSeg:
+	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
 		return "mov"
 	case OpAddRegRm:
 		return "add"
@@ -137,6 +137,15 @@ func (reg Register) String() string {
 func (reg Register) AsmString() string {
 	names := []string{"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh", "ax", "cx", "dx", "bx", "sp", "bp", "si", "di"}
 	return names[reg.name+reg.width*8]
+}
+
+func (seg Segment) String() string {
+	return seg.AsmString()
+}
+
+func (seg Segment) AsmString() string {
+	names := []string{"es", "cs", "ss", "ds"}
+	return names[seg.name]
 }
 
 func (mem Memory) String() string {
@@ -299,6 +308,36 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Register{name: RegA, width: w},
 				},
 			})
+		case (i1 & 0b11111100) == 0b10001100:
+			i2 := text[i]; i++
+			d := (i1 & 0b00000010) >> 1
+			mod := (i2 & 0b11000000) >> 6
+			reg := (i2 & 0b00111000) >> 3
+			rm := (i2 & 0b00000111)
+			if reg & 0b100 != 0 {
+				err = errors.Join(err, fmt.Errorf("not a segment register"))
+				reg = reg & 0b011
+			}
+			inst := Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,0,0},
+				operation: OpMovRmSeg,
+				operands: nil,
+			}
+			opReg := Segment{name: reg}
+			var opRm Operand
+			if mod == 0b11 {
+				opRm = Register{name: rm, width: 0b1}
+			} else {
+				opRm = Memory{mod: mod, rm: rm}
+			}
+			if d == 0 { // from rm (to segment)
+				inst.operands = Operands{opReg, opRm}
+			} else { // to rm (from segment)
+				inst.operands = Operands{opRm, opReg}
+			}
+			insts = append(insts, inst)
 		case (i1 & 0b11111100) == 0:
 			i2 := text[i]; i++
 			d := (i1 & 0b00000010) >> 1
