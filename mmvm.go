@@ -284,6 +284,21 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Address{width: w, addr: addr},
 				},
 			})
+		case (i1 & 0b11111110) == 0b10100010:
+			i2 := text[i]; i++
+			i3 := text[i]; i++
+			w := i1 & 0b1
+			addr := (int16(i3) << 8) ^ int16(i2)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,i3,0},
+				operation: OpMovMemAcc,
+				operands: Operands{
+					Address{width: w, addr: addr},
+					Register{name: RegA, width: w},
+				},
+			})
 		case (i1 & 0b11111100) == 0:
 			i2 := text[i]; i++
 			d := (i1 & 0b00000010) >> 1
