@@ -83,6 +83,8 @@ const (
 	OpPopSeg
 	OpXchgRmReg
 	OpXchgAccReg
+	OpInFixedPort
+	OpInVarPort
 
 	OpAddRegRm
 	OpIntType3
@@ -121,6 +123,10 @@ func (op Operation) Description() string {
 		return "XCHG Register/Memory with Register"
 	case OpXchgAccReg:
 		return "XCHG Register with Accumulator"
+	case OpInFixedPort:
+		return "IN Fixed Port"
+	case OpInVarPort:
+		return "IN Variable Port"
 	case OpAddRegRm:
 		return "ADD Register/Memory with Register to Either"
 	case OpIntType3:
@@ -142,6 +148,8 @@ func (op Operation) String() string {
 		return "pop"
 	case OpXchgRmReg, OpXchgAccReg:
 		return "xchg"
+	case OpInFixedPort, OpInVarPort:
+		return "in"
 	case OpAddRegRm:
 		return "add"
 	case OpIntType3, OpIntTypeSpecified:
@@ -503,6 +511,28 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Register{name: reg, width: 0b1},
 					Register{name: RegA, width: 0b1},
 				},
+			})
+		case (i1 & 0b11111110) == 0b11100100:
+			//w := W(i1)
+			i2 := text[i]; i++
+			port := int16(i2)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,0,0},
+				operation: OpInFixedPort,
+				operands: Operands{
+					Immediate{width: 0, value: port},
+				},
+			})
+		case (i1 & 0b11111110) == 0b11101100:
+			//w := W(i1)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpInVarPort,
+				operands: nil,
 			})
 		case (i1 & 0b11111100) == 0:
 			i2 := text[i]; i++
