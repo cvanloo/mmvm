@@ -81,6 +81,8 @@ const (
 	OpPopRm
 	OpPopReg
 	OpPopSeg
+	OpXchgRmReg
+	OpXchgAccReg
 
 	OpAddRegRm
 	OpIntType3
@@ -115,6 +117,10 @@ func (op Operation) Description() string {
 		return "POP Register"
 	case OpPopSeg:
 		return "POP Segment Register"
+	case OpXchgRmReg:
+		return "XCHG Register/Memory with Register"
+	case OpXchgAccReg:
+		return "XCHG Register with Accumulator"
 	case OpAddRegRm:
 		return "ADD Register/Memory with Register to Either"
 	case OpIntType3:
@@ -134,6 +140,8 @@ func (op Operation) String() string {
 		return "push"
 	case OpPopRm, OpPopReg, OpPopSeg:
 		return "pop"
+	case OpXchgRmReg, OpXchgAccReg:
+		return "xchg"
 	case OpAddRegRm:
 		return "add"
 	case OpIntType3, OpIntTypeSpecified:
@@ -435,6 +443,37 @@ func decode(text []byte) (insts []Instruction, err error) {
 				bytes: [4]byte{i1,0,0,0},
 				operation: OpPopSeg,
 				operands: Operands{Segment{name: reg}},
+			})
+		case (i1 & 0b11111110) == 0b10000110:
+			i2 := text[i]; i++
+			w := i1 & 0b1
+			mod := (i2 >> 6) & 0b11
+			reg := (i2 >> 3) & 0b111
+			rm := i2 & 0b111
+			var opRm Operand
+			if mod == 0b11 {
+				opRm = Register{name: rm, width: w}
+			} else {
+				opRm = Memory{mod: mod, rm: rm}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,0,0},
+				operation: OpXchgRmReg,
+				operands: Operands{opRm, Register{name: reg, width: w}},
+			})
+		case (i1 & 0b11111000) == 0b10010000:
+			reg := i1 & 0b111
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpXchgAccReg,
+				operands: Operands{
+					Register{name: reg, width: 0b1},
+					Register{name: RegA, width: 0b1},
+				},
 			})
 		case (i1 & 0b11111100) == 0:
 			i2 := text[i]; i++
