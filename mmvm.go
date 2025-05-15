@@ -75,6 +75,10 @@ const (
 	OpMovAccMem
 	OpMovMemAcc
 	OpMovRmSeg
+	OpPushRm
+	OpPushReg
+	OpPushSeg
+
 	OpAddRegRm
 	OpIntType3
 	OpIntTypeSpecified
@@ -96,6 +100,12 @@ func (op Operation) Description() string {
 		return "MOV Accumulator to Memory"
 	case OpMovRmSeg:
 		return "MOV Register/Memory to/from Segment Register"
+	case OpPushRm:
+		return "PUSH Register/Memory"
+	case OpPushReg:
+		return "PUSH Register"
+	case OpPushSeg:
+		return "Push Segment Register"
 	case OpAddRegRm:
 		return "ADD Register/Memory with Register to Either"
 	case OpIntType3:
@@ -112,6 +122,8 @@ func (op Operation) String() string {
 
 	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
 		return "mov"
+	case OpPushRm, OpPushReg, OpPushSeg:
+		return "push"
 	case OpAddRegRm:
 		return "add"
 	case OpIntType3, OpIntTypeSpecified:
@@ -338,6 +350,44 @@ func decode(text []byte) (insts []Instruction, err error) {
 				inst.operands = Operands{opRm, opReg}
 			}
 			insts = append(insts, inst)
+		case i1 == 0b11111111:
+			i2 := text[i]; i++
+			mod := (i2 & 0b11000000) >> 6
+			if (i2 & 0b00111000) >> 3 != 0b110 {
+				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			}
+			rm := i2 & 0b00000111
+			var opRm Operand
+			if mod == 0b11 {
+				opRm = Register{name: rm, width: 0b1}
+			} else {
+				opRm = Memory{mod: mod, rm: rm}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,0,0},
+				operation: OpPushRm,
+				operands: Operands{opRm},
+			})
+		case (i1 & 0b11111000) == 0b01010000:
+			reg := i1 & 0b00000111
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpPushReg,
+				operands: Operands{Register{name: reg, width: 0b1}},
+			})
+		case (i1 & 0b11100111) == 0b00000110:
+			reg := (i1 & 0b00011000) >> 3
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpPushSeg,
+				operands: Operands{Segment{name: reg}},
+			})
 		case (i1 & 0b11111100) == 0:
 			i2 := text[i]; i++
 			d := (i1 & 0b00000010) >> 1
