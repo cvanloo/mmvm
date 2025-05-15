@@ -78,6 +78,9 @@ const (
 	OpPushRm
 	OpPushReg
 	OpPushSeg
+	OpPopRm
+	OpPopReg
+	OpPopSeg
 
 	OpAddRegRm
 	OpIntType3
@@ -105,7 +108,13 @@ func (op Operation) Description() string {
 	case OpPushReg:
 		return "PUSH Register"
 	case OpPushSeg:
-		return "Push Segment Register"
+		return "PUSH Segment Register"
+	case OpPopRm:
+		return "POP Register/Memory"
+	case OpPopReg:
+		return "POP Register"
+	case OpPopSeg:
+		return "POP Segment Register"
 	case OpAddRegRm:
 		return "ADD Register/Memory with Register to Either"
 	case OpIntType3:
@@ -119,11 +128,12 @@ func (op Operation) String() string {
 	switch op {
 	default:
 		panic("unknown operation")
-
 	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
 		return "mov"
 	case OpPushRm, OpPushReg, OpPushSeg:
 		return "push"
+	case OpPopRm, OpPopReg, OpPopSeg:
+		return "pop"
 	case OpAddRegRm:
 		return "add"
 	case OpIntType3, OpIntTypeSpecified:
@@ -386,6 +396,44 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [4]byte{i1,0,0,0},
 				operation: OpPushSeg,
+				operands: Operands{Segment{name: reg}},
+			})
+		case i1 == 0b10001111:
+			i2 := text[i]; i++
+			mod := (i2 & 0b11000000) >> 6
+			if (i2 & 0b00111000) != 0 {
+				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			}
+			rm := i2 & 0b111
+			var opRm Operand
+			if mod == 0b11 {
+				opRm = Register{name: rm, width: 0b1}
+			} else {
+				opRm = Memory{mod: mod, rm: rm}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,0,0},
+				operation: OpPopRm,
+				operands: Operands{opRm},
+			})
+		case (i1 & 0b11111000) == 0b01011000:
+			reg := i1 & 0b111
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpPopReg,
+				operands: Operands{Register{name: reg, width: 0b1}},
+			})
+		case (i1 & 0b11100111) == 0b00000111:
+			reg := (i1 >> 3) & 0b11
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpPopSeg,
 				operands: Operands{Segment{name: reg}},
 			})
 		case (i1 & 0b11111100) == 0:
