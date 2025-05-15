@@ -223,6 +223,46 @@ func (inst Instruction) String() string {
 	return fmt.Sprintf("%04x: %-14x %s %s", inst.offset, inst.bytes[:inst.size], inst.operation, inst.operands)
 }
 
+func W(i byte) byte {
+	return i & 1
+}
+
+func REG1(i byte) byte {
+	return i & 0b111
+}
+
+func WREG(i byte) (w, reg byte) {
+	return (i >> 3) & 1, i & 0b111
+}
+
+func DW(i byte) (d, w byte) {
+	return D(i), W(i)
+}
+
+func D(i byte) byte {
+	return (i >> 1) & 1
+}
+
+func MODREGRM(i byte) (mod, reg, rm byte) {
+	return MOD(i), REG(i), RM(i)
+}
+
+func MOD(i byte) byte {
+	return (i >> 6) & 0b11
+}
+
+func RM(i byte) byte {
+	return i & 0b111
+}
+
+func REG(i byte) byte {
+	return (i >> 3) & 0b111
+}
+
+func SEG(i byte) byte {
+	return (i >> 3) & 0b11
+}
+
 func decode(text []byte) (insts []Instruction, err error) {
 	for i := 0; i < len(text); {
 		offset := i
@@ -232,11 +272,8 @@ func decode(text []byte) (insts []Instruction, err error) {
 			err = errors.Join(err, fmt.Errorf("unrecognized instruction: %x", i1))
 		case (i1 & 0b11111100) == 0b10001000:
 			i2 := text[i]; i++
-			d := (i1 & 0b00000010) >> 1
-			w := i1 & 0b00000001 // w == 0 -> byte, w == 1 -> word (copy 2 bytes at once)
-			mod := (i2 & 0b11000000) >> 6
-			reg := (i2 & 0b00111000) >> 3
-			rm := i2 & 0b00000111
+			d, w := DW(i1)
+			mod, reg, rm := MODREGRM(i2)
 			inst := Instruction {
 				offset: offset,
 				size: i - offset,
@@ -261,17 +298,16 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i2 := text[i]; i++
 			i3 := text[i]; i++
 			i4 := byte(0)
-			w := i1 & 0b1
+			w := W(i1)
 			data := int16(i3)
 			if w == 1 {
 				i4 = text[i]; i++
 				data = (int16(i4) << 8) ^ data
 			}
-			mod := (i2 & 0b11000000) >> 6
-			if (i2 & 0b00111000) != 0 {
+			mod, zzz, rm := MODREGRM(i2)
+			if zzz != 0 {
 				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
 			}
-			rm := i2 & 0b111
 			var opRm Operand
 			if mod == 0b11 {
 				opRm = Register{name: rm, width: w}
@@ -291,13 +327,12 @@ func decode(text []byte) (insts []Instruction, err error) {
 		case (i1 & 0b11110000) == 0b10110000:
 			i2 := text[i]; i++
 			i3 := byte(0)
-			w := (i1 & 0b00001000) >> 3
+			w, reg := WREG(i1)
 			data := int16(i2)
 			if w == 1 {
 				i3 = text[i]; i++
 				data = (int16(i3) << 8) ^ data
 			}
-			reg := i1 & 0b00000111
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
@@ -311,7 +346,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 		case (i1 & 0b11111110) == 0b10100000:
 			i2 := text[i]; i++
 			i3 := text[i]; i++
-			w := i1 & 0b1
+			w := W(i1)
 			addr := (int16(i3) << 8) ^ int16(i2)
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -326,7 +361,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 		case (i1 & 0b11111110) == 0b10100010:
 			i2 := text[i]; i++
 			i3 := text[i]; i++
-			w := i1 & 0b1
+			w := W(i1)
 			addr := (int16(i3) << 8) ^ int16(i2)
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -340,10 +375,8 @@ func decode(text []byte) (insts []Instruction, err error) {
 			})
 		case (i1 & 0b11111100) == 0b10001100:
 			i2 := text[i]; i++
-			d := (i1 & 0b00000010) >> 1
-			mod := (i2 & 0b11000000) >> 6
-			reg := (i2 & 0b00111000) >> 3
-			rm := (i2 & 0b00000111)
+			d := D(i1)
+			mod, reg, rm := MODREGRM(i2)
 			if reg & 0b100 != 0 {
 				err = errors.Join(err, fmt.Errorf("not a segment register"))
 				reg = reg & 0b011
@@ -370,11 +403,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, inst)
 		case i1 == 0b11111111:
 			i2 := text[i]; i++
-			mod := (i2 & 0b11000000) >> 6
-			if (i2 & 0b00111000) >> 3 != 0b110 {
+			mod, ooz, rm := MODREGRM(i2)
+			if ooz != 0b110 {
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
 			}
-			rm := i2 & 0b00000111
 			var opRm Operand
 			if mod == 0b11 {
 				opRm = Register{name: rm, width: 0b1}
@@ -389,7 +421,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: Operands{opRm},
 			})
 		case (i1 & 0b11111000) == 0b01010000:
-			reg := i1 & 0b00000111
+			reg := REG1(i1)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
@@ -398,7 +430,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: Operands{Register{name: reg, width: 0b1}},
 			})
 		case (i1 & 0b11100111) == 0b00000110:
-			reg := (i1 & 0b00011000) >> 3
+			reg := SEG(i1)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
@@ -408,11 +440,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			})
 		case i1 == 0b10001111:
 			i2 := text[i]; i++
-			mod := (i2 & 0b11000000) >> 6
-			if (i2 & 0b00111000) != 0 {
+			mod, zzz, rm := MODREGRM(i2)
+			if zzz != 0 {
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
 			}
-			rm := i2 & 0b111
 			var opRm Operand
 			if mod == 0b11 {
 				opRm = Register{name: rm, width: 0b1}
@@ -427,7 +458,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: Operands{opRm},
 			})
 		case (i1 & 0b11111000) == 0b01011000:
-			reg := i1 & 0b111
+			reg := REG1(i1)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
@@ -436,7 +467,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: Operands{Register{name: reg, width: 0b1}},
 			})
 		case (i1 & 0b11100111) == 0b00000111:
-			reg := (i1 >> 3) & 0b11
+			reg := SEG(i1)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
@@ -446,10 +477,8 @@ func decode(text []byte) (insts []Instruction, err error) {
 			})
 		case (i1 & 0b11111110) == 0b10000110:
 			i2 := text[i]; i++
-			w := i1 & 0b1
-			mod := (i2 >> 6) & 0b11
-			reg := (i2 >> 3) & 0b111
-			rm := i2 & 0b111
+			w := W(i1)
+			mod, reg, rm := MODREGRM(i2)
 			var opRm Operand
 			if mod == 0b11 {
 				opRm = Register{name: rm, width: w}
@@ -464,7 +493,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: Operands{opRm, Register{name: reg, width: w}},
 			})
 		case (i1 & 0b11111000) == 0b10010000:
-			reg := i1 & 0b111
+			reg := REG1(i1)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
@@ -477,11 +506,8 @@ func decode(text []byte) (insts []Instruction, err error) {
 			})
 		case (i1 & 0b11111100) == 0:
 			i2 := text[i]; i++
-			d := (i1 & 0b00000010) >> 1
-			w := i1 & 0b00000001
-			mod := (i2 & 0b11000000) >> 6
-			reg := (i2 & 0b00111000) >> 3
-			rm := i2 & 0b00000111
+			d, w := DW(i1)
+			mod, reg, rm := MODREGRM(i2)
 			inst := Instruction {
 				offset: offset,
 				size: i - offset,
@@ -532,7 +558,7 @@ func must[T any](t T, err error) T {
 }
 
 func main() {
-	bin := must(os.ReadFile("a2.out"))
+	bin := must(os.ReadFile("a.out"))
 	exec := *(*Exec)(unsafe.Pointer(&bin[0]))
 	fmt.Printf("%#v\n", exec)
 	text := bin[32:32+exec.sizeText]
