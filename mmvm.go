@@ -95,8 +95,10 @@ const (
 	OpSAHF
 	OpPUSHF
 	OpPOPF
-
 	OpAddRegRm
+	OpAddRmImm
+	OpAddAccImm
+
 	OpIntType3
 	OpIntTypeSpecified
 )
@@ -159,6 +161,10 @@ func (op Operation) Description() string {
 		return "POPF Pop Flags"
 	case OpAddRegRm:
 		return "ADD Register/Memory with Register to Either"
+	case OpAddRmImm:
+		return "ADD Immediate to Register/Memory"
+	case OpAddAccImm:
+		return "ADD Immediate to Accumulator"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -198,7 +204,7 @@ func (op Operation) String() string {
 		return "pushf"
 	case OpPOPF:
 		return "popf"
-	case OpAddRegRm:
+	case OpAddRegRm, OpAddRmImm, OpAddAccImm:
 		return "add"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
@@ -295,7 +301,15 @@ func DW(i byte) (d, w byte) {
 	return D(i), W(i)
 }
 
+func SW(i byte) (s, w byte) {
+	return S(i), W(i)
+}
+
 func D(i byte) byte {
+	return (i >> 1) & 1
+}
+
+func S(i byte) byte {
 	return (i >> 1) & 1
 }
 
@@ -725,6 +739,55 @@ func decode(text []byte) (insts []Instruction, err error) {
 				inst.operands = Operands{opReg, opRM}
 			}
 			insts = append(insts, inst)
+		case (i1 & 0b11111100) == 0b10000000:
+			i2 := text[i]; i++
+			i3 := text[i]; i++
+			i4 := byte(0)
+			data := int16(i3)
+			s, w := SW(i1)
+			if s == 0 && w == 1 {
+				i4 = text[i]; i++
+				data = (int16(i4) << 8) ^ data
+			}
+			mod, zzz, rm := MODREGRM(i2)
+			if zzz != 0 {
+				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
+			}
+			var opRM Operand
+			if mod == 0b11 {
+				opRM = Register{name: rm, width: w}
+			} else {
+				opRM = Memory{mod: mod, rm: rm}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,i3,i4},
+				operation: OpAddRmImm,
+				operands: Operands{
+					opRM,
+					Immediate{width: w, value: data},
+				},
+			})
+		case (i1 & 0b11111110) == 0b00000100:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			w := W(i1)
+			data := int16(i2)
+			if w == 1 {
+				i3 = text[i]; i++
+				data = (int16(i3) << 8) ^ data
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,i3,0},
+				operation: OpAddAccImm,
+				operands: Operands{
+					Register{name: RegA, width: w},
+					Immediate{width: w, value: data},
+				},
+			})
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
 				offset: offset,
