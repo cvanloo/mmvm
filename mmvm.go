@@ -653,18 +653,20 @@ func decode(text []byte) (insts []Instruction, err error) {
 			var opRM Operand
 			dispHigh := byte(0)
 			dispLow := byte(0)
-			switch mod {
-			case 0b10:
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
 				i4 = text[i]; i++
 				dispHigh = i4
 				fallthrough
-			case 0b01:
+			case mod == 0b01:
 				i3 = text[i]; i++
 				dispLow = i3
 				fallthrough
-			case 0b00:
+			case mod == 0b00:
 				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case 0b11:
+			case mod == 0b11:
 				opRM = Register{name: rm, width: 1}
 			}
 			insts = append(insts, Instruction {
