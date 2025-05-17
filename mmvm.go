@@ -271,14 +271,14 @@ func (mem Memory) AsmString() string {
 	case 0b00:
 		if mem.rm == 0b110 {
 			disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
-			return fmt.Sprintf("[%s+%04x]", names[mem.rm], disp)
+			return fmt.Sprintf("[%s+%x]", names[mem.rm], disp)
 		}
 		return "[" + names[mem.rm] + "]"
 	case 0b01:
-		return fmt.Sprintf("[%s+%04x]", names[mem.rm], int16(mem.dispLow))
+		return fmt.Sprintf("[%s+%x]", names[mem.rm], int16(mem.dispLow))
 	case 0b10:
 		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
-		return fmt.Sprintf("[%s+%04x]", names[mem.rm], disp)
+		return fmt.Sprintf("[%s+%x]", names[mem.rm], disp)
 	case 0b11:
 		panic("rm is reg")
 	}
@@ -647,17 +647,30 @@ func decode(text []byte) (insts []Instruction, err error) {
 			})
 		case i1 == 0b10001101:
 			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
 			mod, reg, rm := MODREGRM(i2)
 			var opRM Operand
-			if mod == 0b11 {
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch mod {
+			case 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case 0b11:
 				opRM = Register{name: rm, width: 1}
-			} else {
-				opRM = Memory{mod: mod, rm: rm}
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [4]byte{i1,i2,i3,i4},
 				operation: OpLEA,
 				operands: Operands{
 					Register{name: reg, width: 1},
