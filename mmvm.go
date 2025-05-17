@@ -447,7 +447,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Address{width: w, addr: addr},
 				},
 			})
-		case (i1 & 0b11111110) == 0b10100010:
+		case i1 == 0b10100010:
 			i2 := text[i]; i++
 			i3 := text[i]; i++
 			w := W(i1)
@@ -462,7 +462,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Register{name: RegA, width: w},
 				},
 			})
-		case (i1 & 0b11111100) == 0b10001100:
+		case i1 == 0b10001100:
 			i2 := text[i]; i++
 			d := D(i1)
 			mod, reg, rm := MODREGRM(i2)
@@ -941,7 +941,7 @@ func must[T any](t T, err error) T {
 }
 
 func main() {
-	bin := must(os.ReadFile("a.out"))
+	bin := must(os.ReadFile("a3.out"))
 	exec := *(*Exec)(unsafe.Pointer(&bin[0]))
 	fmt.Printf("%#v\n", exec)
 	text := bin[32:32+exec.sizeText]
