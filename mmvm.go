@@ -28,7 +28,7 @@ type (
 	Operands []Operand
 	Instruction struct {
 		offset, size int
-		bytes [4]byte
+		bytes [6]byte
 		operation Operation
 		operands Operands
 	}
@@ -361,21 +361,36 @@ func decode(text []byte) (insts []Instruction, err error) {
 			err = errors.Join(err, fmt.Errorf("unrecognized instruction: %x", i1))
 		case (i1 & 0b11111100) == 0b10001000:
 			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
 			d, w := DW(i1)
 			mod, reg, rm := MODREGRM(i2)
+			opReg := Register{name: reg, width: w}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: 1}
+			}
 			inst := Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,i3,i4,0,0},
 				operation: OpMovRegRm,
 				operands: nil,
-			}
-			opReg := Register{name: reg, width: w}
-			var opRM Operand
-			if mod == 0b11 {
-				opRM = Register{name: rm, width: w}
-			} else {
-				opRM = Memory{mod: mod, rm: rm}
 			}
 			if d == 0 { // from reg
 				inst.operands = Operands{opRM, opReg}
@@ -385,31 +400,52 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, inst)
 		case (i1 & 0b11111110) == 0b11000110:
 			i2 := text[i]; i++
-			i3 := text[i]; i++
-			i4 := byte(0)
+			bs := make([]byte, 0, 6)
+			bs = append(bs, i1, i2)
 			w := W(i1)
-			data := int16(i3)
-			if w == 1 {
-				i4 = text[i]; i++
-				data = (int16(i4) << 8) ^ data
-			}
 			mod, zzz, rm := MODREGRM(i2)
 			if zzz != 0 {
 				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
 			}
-			var opRm Operand
-			if mod == 0b11 {
-				opRm = Register{name: rm, width: w}
-			} else {
-				opRm = Memory{mod: mod, rm: rm}
+			// @todo: properly handle disp in all the other places as well
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				dispHigh = text[i]; i++
+				bs = append(bs, dispHigh)
+				fallthrough
+			case mod == 0b01:
+				dispLow = text[i]; i++
+				bs = append(bs, dispLow)
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: 1}
+			}
+			data1 := text[i]; i++
+			bs = append(bs, data1)
+			data := int16(data1)
+			if w == 1 {
+				data2 := text[i]; i++
+				bs = append(bs, data2)
+				data = (int16(data2) << 8) ^ data
+			}
+			// @fixme: brother eewww
+			for len(bs) < 6 {
+				bs = append(bs, 0)
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,i3,i4},
+				bytes: [6]byte(bs),
 				operation: OpMovRmImm,
 				operands: Operands{
-					opRm,
+					opRM,
 					Immediate{width: w, value: data},
 				},
 			})
@@ -425,7 +461,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,i3,0},
+				bytes: [6]byte{i1,i2,i3,0},
 				operation: OpMovRegImm,
 				operands: Operands{
 					Register{name: reg, width: w},
@@ -440,7 +476,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,i3,0},
+				bytes: [6]byte{i1,i2,i3,0},
 				operation: OpMovAccMem,
 				operands: Operands{
 					Register{name: RegA, width: w},
@@ -455,7 +491,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,i3,0},
+				bytes: [6]byte{i1,i2,i3,0},
 				operation: OpMovMemAcc,
 				operands: Operands{
 					Address{width: w, addr: addr},
@@ -473,7 +509,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			inst := Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpMovRmSeg,
 				operands: nil,
 			}
@@ -505,7 +541,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpPushRm,
 				operands: Operands{opRm},
 			})
@@ -514,7 +550,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpPushReg,
 				operands: Operands{Register{name: reg, width: 0b1}},
 			})
@@ -523,7 +559,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpPushSeg,
 				operands: Operands{Segment{name: reg}},
 			})
@@ -542,7 +578,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpPopRm,
 				operands: Operands{opRm},
 			})
@@ -551,7 +587,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpPopReg,
 				operands: Operands{Register{name: reg, width: 0b1}},
 			})
@@ -560,7 +596,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpPopSeg,
 				operands: Operands{Segment{name: reg}},
 			})
@@ -577,7 +613,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpXchgRmReg,
 				operands: Operands{opRm, Register{name: reg, width: w}},
 			})
@@ -586,7 +622,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpXchgAccReg,
 				operands: Operands{
 					Register{name: reg, width: 0b1},
@@ -600,7 +636,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpInFixedPort,
 				operands: Operands{
 					Immediate{width: 0, value: port},
@@ -611,7 +647,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpInVarPort,
 				operands: nil,
 			})
@@ -622,7 +658,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpInFixedPort,
 				operands: Operands{
 					Immediate{width: 0, value: port},
@@ -633,7 +669,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpOutVarPort,
 				operands: nil,
 			})
@@ -641,7 +677,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpXLAT,
 				operands: nil,
 			})
@@ -672,7 +708,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,i3,i4},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpLEA,
 				operands: Operands{
 					Register{name: reg, width: 1},
@@ -691,7 +727,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpLDS,
 				operands: Operands{
 					Register{name: reg, width: 1},
@@ -710,7 +746,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpLES,
 				operands: Operands{
 					Register{name: reg, width: 1},
@@ -721,7 +757,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpLAHF,
 				operands: nil,
 			})
@@ -729,7 +765,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpSAHF,
 				operands: nil,
 			})
@@ -737,7 +773,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpPUSHF,
 				operands: nil,
 			})
@@ -745,7 +781,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpPOPF,
 				operands: nil,
 			})
@@ -756,7 +792,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			inst := Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpAddRegRm,
 				operands: nil,
 			}
@@ -796,7 +832,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,i3,i4},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpAddRmImm,
 				operands: Operands{
 					opRM,
@@ -815,7 +851,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,i3,0},
+				bytes: [6]byte{i1,i2,i3,0},
 				operation: OpAddAccImm,
 				operands: Operands{
 					Register{name: RegA, width: w},
@@ -830,7 +866,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			inst := Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpAddRegRm,
 				operands: nil,
 			}
@@ -869,7 +905,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,i3,i4},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpAdcRmImm,
 				operands: Operands{
 					opRM,
@@ -888,7 +924,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,i3,0},
+				bytes: [6]byte{i1,i2,i3,0},
 				operation: OpAdcAccImm,
 				operands: Operands{
 					Register{name: RegA, width: w},
@@ -911,7 +947,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpIncRm,
 				operands: Operands{opRM},
 			})
@@ -920,7 +956,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpIncReg,
 				operands: Operands{
 					Register{name: reg, width: 1},
@@ -930,7 +966,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,0,0,0},
+				bytes: [6]byte{i1,0,0,0},
 				operation: OpIntType3,
 				operands: nil,
 			})
@@ -939,7 +975,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [4]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,0,0},
 				operation: OpIntTypeSpecified,
 				operands: Operands{Immediate{width: 0, value: int16(i2)}},
 			})
