@@ -101,6 +101,8 @@ const (
 	OpAdcRegRm
 	OpAdcRmImm
 	OpAdcAccImm
+	OpIncRm
+	OpIncReg
 
 	OpIntType3
 	OpIntTypeSpecified
@@ -174,6 +176,10 @@ func (op Operation) Description() string {
 		return "ADC Immediate to Register/Memory"
 	case OpAdcAccImm:
 		return "ADC Immediate to Accumulator"
+	case OpIncRm:
+		return "INC Register/Memory"
+	case OpIncReg:
+		return "INC Register"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -217,6 +223,8 @@ func (op Operation) String() string {
 		return "add"
 	case OpAdcRegRm, OpAdcRmImm, OpAdcAccImm:
 		return "adc"
+	case OpIncRm, OpIncReg:
+		return "inc"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
 	}
@@ -870,6 +878,37 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: Operands{
 					Register{name: RegA, width: w},
 					Immediate{width: w, value: data},
+				},
+			})
+		case (i1 & 0b11111110) == 0b11111110:
+			i2 := text[i]; i++
+			mod, zzz, rm := MODREGRM(i2)
+			if zzz != 0 {
+				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			}
+			w := W(i1)
+			var opRM Operand
+			if mod == 0b11 {
+				opRM = Register{name: rm, width: w}
+			} else {
+				opRM = Memory{mod: mod, rm: rm}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,0,0},
+				operation: OpIncRm,
+				operands: Operands{opRM},
+			})
+		case (i1 & 0b11111000) == 0b01000000:
+			reg := REG(i1)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpIncReg,
+				operands: Operands{
+					Register{name: reg, width: 1},
 				},
 			})
 		case i1 == 0b11001100:
