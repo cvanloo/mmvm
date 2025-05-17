@@ -98,6 +98,9 @@ const (
 	OpAddRegRm
 	OpAddRmImm
 	OpAddAccImm
+	OpAdcRegRm
+	OpAdcRmImm
+	OpAdcAccImm
 
 	OpIntType3
 	OpIntTypeSpecified
@@ -165,6 +168,12 @@ func (op Operation) Description() string {
 		return "ADD Immediate to Register/Memory"
 	case OpAddAccImm:
 		return "ADD Immediate to Accumulator"
+	case OpAdcRegRm:
+		return "ADC Register/Memory with Register to Either"
+	case OpAdcRmImm:
+		return "ADC Immediate to Register/Memory"
+	case OpAdcAccImm:
+		return "ADC Immediate to Accumulator"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -206,6 +215,8 @@ func (op Operation) String() string {
 		return "popf"
 	case OpAddRegRm, OpAddRmImm, OpAddAccImm:
 		return "add"
+	case OpAdcRegRm, OpAdcRmImm, OpAdcAccImm:
+		return "adc"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
 	}
@@ -783,6 +794,79 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [4]byte{i1,i2,i3,0},
 				operation: OpAddAccImm,
+				operands: Operands{
+					Register{name: RegA, width: w},
+					Immediate{width: w, value: data},
+				},
+			})
+		case (i1 & 0b11111100) == 0b00010000:
+			i2 := text[i]; i++
+			d, w := DW(i1)
+			mod, reg, rm := MODREGRM(i2)
+			var opRM Operand
+			inst := Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,0,0},
+				operation: OpAddRegRm,
+				operands: nil,
+			}
+			opReg := Register{name: reg, width: w}
+			if mod == 0b11 {
+				opRM = Register{name: rm, width: w}
+			} else {
+				opRM = Memory{mod: mod, rm: rm}
+			}
+			if d == 0 { // from reg
+				inst.operands = Operands{opRM, opReg}
+			} else { // to reg
+				inst.operands = Operands{opReg, opRM}
+			}
+			insts = append(insts, inst)
+		case (i1 & 0b11111100) == 0b10000000:
+			i2 := text[i]; i++
+			i3 := text[i]; i++
+			i4 := byte(0)
+			s, w := SW(i1)
+			mod, zoz, rm := MODREGRM(i2)
+			if zoz != 0b010 {
+				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			}
+			data := int16(i3)
+			if s == 0 && w == 1 {
+				i4 = text[i]; i++
+				data = (int16(i4) << 8) ^ data
+			}
+			var opRM Operand
+			if mod == 0b11 {
+				opRM = Register{name: rm, width: w}
+			} else {
+				opRM = Memory{mod: mod, rm: rm}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,i3,i4},
+				operation: OpAdcRmImm,
+				operands: Operands{
+					opRM,
+					Immediate{width: w, value: data},
+				},
+			})
+		case (i1 & 0b11111110) == 0b00010100:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			w := W(i1)
+			data := int16(i3)
+			if w == 1 {
+				i3 = text[i]; i++
+				data = (int16(i3) << 8) ^ data
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,i3,0},
+				operation: OpAdcAccImm,
 				operands: Operands{
 					Register{name: RegA, width: w},
 					Immediate{width: w, value: data},
