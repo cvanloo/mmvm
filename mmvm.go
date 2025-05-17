@@ -87,6 +87,14 @@ const (
 	OpInVarPort
 	OpOutFixedPort
 	OpOutVarPort
+	OpXLAT
+	OpLEA
+	OpLDS
+	OpLES
+	OpLAHF
+	OpSAHF
+	OpPUSHF
+	OpPOPF
 
 	OpAddRegRm
 	OpIntType3
@@ -133,6 +141,22 @@ func (op Operation) Description() string {
 		return "OUT Fixed Port"
 	case OpOutVarPort:
 		return "OUT Variable Port"
+	case OpXLAT:
+		return "XLAT Translate Byte to AL"
+	case OpLEA:
+		return "LEA Load EA to Register"
+	case OpLDS:
+		return "LDS Load Pointer to DS"
+	case OpLES:
+		return "LES Load Pointer to ES"
+	case OpLAHF:
+		return "LAHF Load AH with Flags"
+	case OpSAHF:
+		return "SAHF Store AH into Flags"
+	case OpPUSHF:
+		return "PUSHF Push Flags"
+	case OpPOPF:
+		return "POPF Pop Flags"
 	case OpAddRegRm:
 		return "ADD Register/Memory with Register to Either"
 	case OpIntType3:
@@ -158,6 +182,22 @@ func (op Operation) String() string {
 		return "in"
 	case OpOutFixedPort, OpOutVarPort:
 		return "out"
+	case OpXLAT:
+		return "xlat"
+	case OpLEA:
+		return "lea"
+	case OpLDS:
+		return "lds"
+	case OpLES:
+		return "les"
+	case OpLAHF:
+		return "lahf"
+	case OpSAHF:
+		return "sahf"
+	case OpPUSHF:
+		return "pushf"
+	case OpPOPF:
+		return "popf"
 	case OpAddRegRm:
 		return "add"
 	case OpIntType3, OpIntTypeSpecified:
@@ -562,6 +602,103 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [4]byte{i1,0,0,0},
 				operation: OpOutVarPort,
+				operands: nil,
+			})
+		case i1 == 0b11010111:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpXLAT,
+				operands: nil,
+			})
+		case i1 == 0b10001101:
+			i2 := text[i]; i++
+			mod, reg, rm := MODREGRM(i2)
+			var opRM Operand
+			if mod == 0b11 {
+				opRM = Register{name: rm, width: 1}
+			} else {
+				opRM = Memory{mod: mod, rm: rm}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,0,0},
+				operation: OpLEA,
+				operands: Operands{
+					Register{name: reg, width: 1},
+					opRM,
+				},
+			})
+		case i1 == 0b11000101:
+			i2 := text[i]; i++
+			mod, reg, rm := MODREGRM(i2)
+			var opRM Operand
+			if mod == 0b11 {
+				opRM = Register{name: rm, width: 1}
+			} else {
+				opRM = Memory{mod: mod, rm: rm}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,0,0},
+				operation: OpLDS,
+				operands: Operands{
+					Register{name: reg, width: 1},
+					opRM,
+				},
+			})
+		case i1 == 0b11000100:
+			i2 := text[i]; i++
+			mod, reg, rm := MODREGRM(i2)
+			var opRM Operand
+			if mod == 0b11 {
+				opRM = Register{name: rm, width: 1}
+			} else {
+				opRM = Memory{mod: mod, rm: rm}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,i2,0,0},
+				operation: OpLES,
+				operands: Operands{
+					Register{name: reg, width: 1},
+					opRM,
+				},
+			})
+		case i1 == 0b10011111:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpLAHF,
+				operands: nil,
+			})
+		case i1 == 0b10011110:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpSAHF,
+				operands: nil,
+			})
+		case i1 == 0b10011100:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpPUSHF,
+				operands: nil,
+			})
+		case i1 == 0b10011101:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [4]byte{i1,0,0,0},
+				operation: OpPOPF,
 				operands: nil,
 			})
 		case (i1 & 0b11111100) == 0:
