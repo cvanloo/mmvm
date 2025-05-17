@@ -383,12 +383,12 @@ func decode(text []byte) (insts []Instruction, err error) {
 			case mod == 0b00:
 				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
 			case mod == 0b11:
-				opRM = Register{name: rm, width: 1}
+				opRM = Register{name: rm, width: w}
 			}
 			inst := Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,i4,0,0},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpMovRegRm,
 				operands: nil,
 			}
@@ -407,7 +407,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 			if zzz != 0 {
 				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
 			}
-			// @todo: properly handle disp in all the other places as well
 			var opRM Operand
 			dispHigh := byte(0)
 			dispLow := byte(0)
@@ -425,7 +424,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			case mod == 0b00:
 				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
 			case mod == 0b11:
-				opRM = Register{name: rm, width: 1}
+				opRM = Register{name: rm, width: w}
 			}
 			data1 := text[i]; i++
 			bs = append(bs, data1)
@@ -435,7 +434,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				bs = append(bs, data2)
 				data = (int16(data2) << 8) ^ data
 			}
-			// @fixme: brother eewww
+			// @fixme: brother eewww [:slice-to-array:]
 			for len(bs) < 6 {
 				bs = append(bs, 0)
 			}
@@ -461,7 +460,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,0},
+				bytes: [6]byte{i1,i2,i3},
 				operation: OpMovRegImm,
 				operands: Operands{
 					Register{name: reg, width: w},
@@ -476,7 +475,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,0},
+				bytes: [6]byte{i1,i2,i3},
 				operation: OpMovAccMem,
 				operands: Operands{
 					Register{name: RegA, width: w},
@@ -491,66 +490,96 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,0},
+				bytes: [6]byte{i1,i2,i3},
 				operation: OpMovMemAcc,
 				operands: Operands{
 					Address{width: w, addr: addr},
 					Register{name: RegA, width: w},
 				},
 			})
-		case i1 == 0b10001100:
+		case (i1 & 0b11111101) == 0b10001100:
 			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
 			d := D(i1)
 			mod, reg, rm := MODREGRM(i2)
 			if reg & 0b100 != 0 {
 				err = errors.Join(err, fmt.Errorf("not a segment register"))
 				reg = reg & 0b011
 			}
+			opReg := Segment{name: reg}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: 1}
+			}
 			inst := Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpMovRmSeg,
 				operands: nil,
 			}
-			opReg := Segment{name: reg}
-			var opRm Operand
-			if mod == 0b11 {
-				opRm = Register{name: rm, width: 0b1}
-			} else {
-				opRm = Memory{mod: mod, rm: rm}
-			}
 			if d == 0 { // from rm (to segment)
-				inst.operands = Operands{opReg, opRm}
+				inst.operands = Operands{opReg, opRM}
 			} else { // to rm (from segment)
-				inst.operands = Operands{opRm, opReg}
+				inst.operands = Operands{opRM, opReg}
 			}
 			insts = append(insts, inst)
 		case i1 == 0b11111111:
 			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
 			mod, ooz, rm := MODREGRM(i2)
 			if ooz != 0b110 {
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
 			}
-			var opRm Operand
-			if mod == 0b11 {
-				opRm = Register{name: rm, width: 0b1}
-			} else {
-				opRm = Memory{mod: mod, rm: rm}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: 1}
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpPushRm,
-				operands: Operands{opRm},
+				operands: Operands{opRM},
 			})
 		case (i1 & 0b11111000) == 0b01010000:
 			reg := REG1(i1)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpPushReg,
 				operands: Operands{Register{name: reg, width: 0b1}},
 			})
@@ -559,35 +588,50 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpPushSeg,
 				operands: Operands{Segment{name: reg}},
 			})
 		case i1 == 0b10001111:
 			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
 			mod, zzz, rm := MODREGRM(i2)
 			if zzz != 0 {
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
 			}
-			var opRm Operand
-			if mod == 0b11 {
-				opRm = Register{name: rm, width: 0b1}
-			} else {
-				opRm = Memory{mod: mod, rm: rm}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: 1}
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpPopRm,
-				operands: Operands{opRm},
+				operands: Operands{opRM},
 			})
 		case (i1 & 0b11111000) == 0b01011000:
 			reg := REG1(i1)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpPopReg,
 				operands: Operands{Register{name: reg, width: 0b1}},
 			})
@@ -596,33 +640,48 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpPopSeg,
 				operands: Operands{Segment{name: reg}},
 			})
 		case (i1 & 0b11111110) == 0b10000110:
 			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
 			w := W(i1)
 			mod, reg, rm := MODREGRM(i2)
-			var opRm Operand
-			if mod == 0b11 {
-				opRm = Register{name: rm, width: w}
-			} else {
-				opRm = Memory{mod: mod, rm: rm}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: w}
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpXchgRmReg,
-				operands: Operands{opRm, Register{name: reg, width: w}},
+				operands: Operands{opRM, Register{name: reg, width: w}},
 			})
 		case (i1 & 0b11111000) == 0b10010000:
 			reg := REG1(i1)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpXchgAccReg,
 				operands: Operands{
 					Register{name: reg, width: 0b1},
@@ -636,7 +695,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2},
 				operation: OpInFixedPort,
 				operands: Operands{
 					Immediate{width: 0, value: port},
@@ -647,7 +706,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpInVarPort,
 				operands: nil,
 			})
@@ -658,7 +717,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2},
 				operation: OpInFixedPort,
 				operands: Operands{
 					Immediate{width: 0, value: port},
@@ -669,7 +728,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpOutVarPort,
 				operands: nil,
 			})
@@ -677,7 +736,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpXLAT,
 				operands: nil,
 			})
@@ -717,17 +776,32 @@ func decode(text []byte) (insts []Instruction, err error) {
 			})
 		case i1 == 0b11000101:
 			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
 			mod, reg, rm := MODREGRM(i2)
 			var opRM Operand
-			if mod == 0b11 {
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
 				opRM = Register{name: rm, width: 1}
-			} else {
-				opRM = Memory{mod: mod, rm: rm}
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpLDS,
 				operands: Operands{
 					Register{name: reg, width: 1},
@@ -736,17 +810,32 @@ func decode(text []byte) (insts []Instruction, err error) {
 			})
 		case i1 == 0b11000100:
 			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
 			mod, reg, rm := MODREGRM(i2)
 			var opRM Operand
-			if mod == 0b11 {
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
 				opRM = Register{name: rm, width: 1}
-			} else {
-				opRM = Memory{mod: mod, rm: rm}
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpLES,
 				operands: Operands{
 					Register{name: reg, width: 1},
@@ -757,7 +846,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpLAHF,
 				operands: nil,
 			})
@@ -765,7 +854,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpSAHF,
 				operands: nil,
 			})
@@ -773,7 +862,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpPUSHF,
 				operands: nil,
 			})
@@ -781,27 +870,42 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpPOPF,
 				operands: nil,
 			})
 		case (i1 & 0b11111100) == 0:
 			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
 			d, w := DW(i1)
 			mod, reg, rm := MODREGRM(i2)
+			opReg := Register{name: reg, width: w}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: w}
+			}
 			inst := Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpAddRegRm,
 				operands: nil,
-			}
-			opReg := Register{name: reg, width: w}
-			var opRM Operand
-			if mod == 0b11 {
-				opRM = Register{name: rm, width: w}
-			} else {
-				opRM = Memory{mod: mod, rm: rm}
 			}
 			if d == 0 { // from reg
 				inst.operands = Operands{opRM, opReg}
@@ -810,29 +914,51 @@ func decode(text []byte) (insts []Instruction, err error) {
 			}
 			insts = append(insts, inst)
 		case (i1 & 0b11111100) == 0b10000000:
+			// @fixme(add-carry): same bits in i1 as with add (w/o carry), difference is only encoded in i2!
 			i2 := text[i]; i++
-			i3 := text[i]; i++
-			i4 := byte(0)
-			data := int16(i3)
+			bs := make([]byte, 0, 6)
+			bs = append(bs, i1, i2)
 			s, w := SW(i1)
-			if s == 0 && w == 1 {
-				i4 = text[i]; i++
-				data = (int16(i4) << 8) ^ data
-			}
 			mod, zzz, rm := MODREGRM(i2)
 			if zzz != 0 {
 				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
 			}
 			var opRM Operand
-			if mod == 0b11 {
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				dispHigh = text[i]; i++
+				bs = append(bs, dispHigh)
+				fallthrough
+			case mod == 0b01:
+				dispLow = text[i]; i++
+				bs = append(bs, dispLow)
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
 				opRM = Register{name: rm, width: w}
-			} else {
-				opRM = Memory{mod: mod, rm: rm}
+			}
+			data1 := text[i]; i++
+			bs = append(bs, data1)
+			// @fixme: s == 0 then don't sign extend [:sign-extend-s:]
+			data := int16(data1)
+			if s == 0 && w == 1 {
+				data2 := text[i]; i++
+				bs = append(bs, data2)
+				data = (int16(data2) << 8) ^ data
+			}
+			// @fixme: brother eewww [:slice-to-array:]
+			for len(bs) < 6 {
+				bs = append(bs, 0)
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,i4},
+				bytes: [6]byte(bs),
 				operation: OpAddRmImm,
 				operands: Operands{
 					opRM,
@@ -851,7 +977,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,0},
+				bytes: [6]byte{i1,i2,i3},
 				operation: OpAddAccImm,
 				operands: Operands{
 					Register{name: RegA, width: w},
@@ -860,21 +986,36 @@ func decode(text []byte) (insts []Instruction, err error) {
 			})
 		case (i1 & 0b11111100) == 0b00010000:
 			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
 			d, w := DW(i1)
 			mod, reg, rm := MODREGRM(i2)
+			opReg := Register{name: reg, width: w}
 			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: w}
+			}
 			inst := Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpAddRegRm,
 				operands: nil,
-			}
-			opReg := Register{name: reg, width: w}
-			if mod == 0b11 {
-				opRM = Register{name: rm, width: w}
-			} else {
-				opRM = Memory{mod: mod, rm: rm}
 			}
 			if d == 0 { // from reg
 				inst.operands = Operands{opRM, opReg}
@@ -883,29 +1024,52 @@ func decode(text []byte) (insts []Instruction, err error) {
 			}
 			insts = append(insts, inst)
 		case (i1 & 0b11111100) == 0b10000000:
+			// @fixme(add-carry): same bits in i1 as with add (w/o carry), difference is only encoded in i2!
+			// @fixme(disp)
 			i2 := text[i]; i++
-			i3 := text[i]; i++
-			i4 := byte(0)
+			bs := make([]byte, 0, 6)
+			bs = append(bs, i1, i2)
 			s, w := SW(i1)
 			mod, zoz, rm := MODREGRM(i2)
 			if zoz != 0b010 {
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
 			}
-			data := int16(i3)
-			if s == 0 && w == 1 {
-				i4 = text[i]; i++
-				data = (int16(i4) << 8) ^ data
-			}
 			var opRM Operand
-			if mod == 0b11 {
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				dispHigh = text[i]; i++
+				bs = append(bs, dispHigh)
+				fallthrough
+			case mod == 0b01:
+				dispLow = text[i]; i++
+				bs = append(bs, dispLow)
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
 				opRM = Register{name: rm, width: w}
-			} else {
-				opRM = Memory{mod: mod, rm: rm}
+			}
+			data1 := text[i]; i++
+			bs = append(bs, data1)
+			// @fixme: s == 0 then don't sign extend [:sign-extend-s:]
+			data := int16(data1)
+			if s == 0 && w == 1 {
+				data2 := text[i]; i++
+				bs = append(bs, data2)
+				data = (int16(data2) << 8) ^ data
+			}
+			// @fixme: brother eewww [:slice-to-array:]
+			for len(bs) < 6 {
+				bs = append(bs, 0)
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,i4},
+				bytes: [6]byte(bs),
 				operation: OpAdcRmImm,
 				operands: Operands{
 					opRM,
@@ -924,7 +1088,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,0},
+				bytes: [6]byte{i1,i2,i3},
 				operation: OpAdcAccImm,
 				operands: Operands{
 					Register{name: RegA, width: w},
@@ -933,21 +1097,36 @@ func decode(text []byte) (insts []Instruction, err error) {
 			})
 		case (i1 & 0b11111110) == 0b11111110:
 			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
 			mod, zzz, rm := MODREGRM(i2)
 			if zzz != 0 {
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
 			}
 			w := W(i1)
 			var opRM Operand
-			if mod == 0b11 {
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
 				opRM = Register{name: rm, width: w}
-			} else {
-				opRM = Memory{mod: mod, rm: rm}
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpIncRm,
 				operands: Operands{opRM},
 			})
@@ -956,7 +1135,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpIncReg,
 				operands: Operands{
 					Register{name: reg, width: 1},
@@ -966,7 +1145,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,0,0,0},
+				bytes: [6]byte{i1},
 				operation: OpIntType3,
 				operands: nil,
 			})
@@ -975,7 +1154,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,0,0},
+				bytes: [6]byte{i1,i2},
 				operation: OpIntTypeSpecified,
 				operands: Operands{Immediate{width: 0, value: int16(i2)}},
 			})
