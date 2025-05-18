@@ -103,6 +103,8 @@ const (
 	OpAdcAccImm
 	OpIncRm
 	OpIncReg
+	OpAAA
+	OpBAA
 
 	OpIntType3
 	OpIntTypeSpecified
@@ -180,6 +182,10 @@ func (op Operation) Description() string {
 		return "INC Register/Memory"
 	case OpIncReg:
 		return "INC Register"
+	case OpAAA:
+		return "AAA ASCII Adjust for Add"
+	case OpBAA:
+		return "BAA Decimal Adjust for Add"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -225,6 +231,10 @@ func (op Operation) String() string {
 		return "adc"
 	case OpIncRm, OpIncReg:
 		return "inc"
+	case OpAAA:
+		return "aaa"
+	case OpBAA:
+		return "baa"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
 	}
@@ -1141,6 +1151,22 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Register{name: reg, width: 1},
 				},
 			})
+		case i1 == 0b00110111:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpAAA,
+				operands: nil,
+			})
+		case i1 == 0b00100111:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpBAA,
+				operands: nil,
+			})
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -1171,7 +1197,7 @@ func must[T any](t T, err error) T {
 }
 
 func main() {
-	bin := must(os.ReadFile("a3.out"))
+	bin := must(os.ReadFile("a.out"))
 	exec := *(*Exec)(unsafe.Pointer(&bin[0]))
 	fmt.Printf("%#v\n", exec)
 	text := bin[32:32+exec.sizeText]
