@@ -112,6 +112,8 @@ const (
 	OpSsbRegRm
 	OpSsbRmImm
 	OpSsbAccImm
+	OpDecRm
+	OpDecReg
 
 	OpIntType3
 	OpIntTypeSpecified
@@ -205,6 +207,10 @@ func (op Operation) Description() string {
 		return "SSB Immediate from Register/Memory"
 	case OpSsbAccImm:
 		return "SSB Immediate from Accumulator"
+	case OpDecRm:
+		return "DEC Register/Memory"
+	case OpDecReg:
+		return "DEC Register"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -258,6 +264,8 @@ func (op Operation) String() string {
 		return "sub"
 	case OpSsbRegRm, OpSsbRmImm, OpSsbAccImm:
 		return "ssb"
+	case OpDecRm, OpDecReg:
+		return "dec"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
 	}
@@ -1088,9 +1096,15 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i2 := text[i]; i++
 			i3 := byte(0)
 			i4 := byte(0)
-			mod, zzz, rm := MODREGRM(i2)
-			if zzz != 0 {
+			mod, zzx, rm := MODREGRM(i2)
+			var op Operation
+			switch zzx {
+			default:
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			case 0b000:
+				op = OpIncRm
+			case 0b001:
+				op = OpDecRm
 			}
 			w := W(i1)
 			var opRM Operand
@@ -1116,7 +1130,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2,i3,i4},
-				operation: OpIncRm,
+				operation: op,
 				operands: Operands{opRM},
 			})
 		case (i1 & 0b11111000) == 0b01000000:
@@ -1260,6 +1274,17 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: Operands{
 					Register{name: RegA, width: w},
 					Immediate{width: w, value: data},
+				},
+			})
+		case (i1 & 0b11111000) == 0b01001000:
+			reg := REG1(i1)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpDecReg,
+				operands: Operands{
+					Register{name: reg, width: 1},
 				},
 			})
 		case i1 == 0b11001100:
