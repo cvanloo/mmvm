@@ -955,12 +955,15 @@ func decode(text []byte) (insts []Instruction, err error) {
 			var op Operation
 			switch zxz {
 			default:
-				// @todo: SSB/SUB is also encoded here!
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
-			case 0b000: // ADD
+			case 0b000:
 				op = OpAddRmImm
-			case 0b010: // ADC
+			case 0b010:
 				op = OpAdcRmImm
+			case 0b101:
+				op = OpSubRmImm
+			case 0b011:
+				op = OpSsbRmImm
 			}
 			var opRM Operand
 			dispHigh := byte(0)
@@ -1053,7 +1056,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2,i3,i4},
-				operation: OpAddRegRm,
+				operation: OpAdcRegRm,
 				operands: nil,
 			}
 			if d == 0 { // from reg
@@ -1142,6 +1145,122 @@ func decode(text []byte) (insts []Instruction, err error) {
 				bytes: [6]byte{i1},
 				operation: OpBAA,
 				operands: nil,
+			})
+		case (i1 & 0b11111100) == 0b00101000:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
+			d, w := DW(i1)
+			mod, reg, rm := MODREGRM(i2)
+			opReg := Register{name: reg, width: w}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: w}
+			}
+			inst := Instruction{
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4},
+				operation: OpSubRegRm,
+				operands: nil,
+			}
+			if d == 0 { // from reg
+				inst.operands = Operands{opRM, opReg}
+			} else { // to reg
+				inst.operands = Operands{opReg, opRM}
+			}
+			insts = append(insts, inst)
+		case (i1 & 0b11111110) == 0b00101100:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			w := W(i1)
+			data := int16(i2)
+			if w == 1 {
+				i3 = text[i]; i++
+				data = (int16(i3) << 8) ^ data
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3},
+				operation: OpSubAccImm,
+				operands: Operands{
+					Register{name: RegA, width: w},
+					Immediate{width: w, value: data},
+				},
+			})
+		case (i1 & 0b11111100) == 0b00011000:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
+			d, w := DW(i1)
+			mod, reg, rm := MODREGRM(i2)
+			opReg := Register{name: reg, width: w}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: w}
+			}
+			inst := Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4},
+				operation: OpSsbRegRm,
+				operands: nil,
+			}
+			if d == 0 { // from reg
+				inst.operands = Operands{opRM, opReg}
+			} else { // to reg
+				inst.operands = Operands{opReg, opRM}
+			}
+			insts = append(insts, inst)
+		case (i1 & 0b11111100) == 0b00011000: // @fixme: reference seems to be missing a bit
+			i2 := text[i]; i++
+			i3 := byte(0)
+			w := W(i1)
+			data := int16(i3)
+			if w == 1 {
+				i3 = text[i]; i++
+				data = (int16(i3) << 8) ^ data
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3},
+				operation: OpSsbAccImm,
+				operands: Operands{
+					Register{name: RegA, width: w},
+					Immediate{width: w, value: data},
+				},
 			})
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
