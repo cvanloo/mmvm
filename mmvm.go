@@ -69,7 +69,8 @@ const (
 )
 
 const (
-	OpMovRegRm Operation = iota
+	OpInvalid Operation = iota
+	OpMovRegRm
 	OpMovRmImm
 	OpMovRegImm
 	OpMovAccMem
@@ -105,6 +106,12 @@ const (
 	OpIncReg
 	OpAAA
 	OpBAA
+	OpSubRegRm
+	OpSubRmImm
+	OpSubAccImm
+	OpSsbRegRm
+	OpSsbRmImm
+	OpSsbAccImm
 
 	OpIntType3
 	OpIntTypeSpecified
@@ -186,6 +193,18 @@ func (op Operation) Description() string {
 		return "AAA ASCII Adjust for Add"
 	case OpBAA:
 		return "BAA Decimal Adjust for Add"
+	case OpSubRegRm:
+		return "SUB Register/Memory and Register to Either"
+	case OpSubRmImm:
+		return "SUB Immediate from Register/Memory"
+	case OpSubAccImm:
+		return "SUB Immediate from Accumulator"
+	case OpSsbRegRm:
+		return "SSB Register/Memory and Register to Either"
+	case OpSsbRmImm:
+		return "SSB Immediate from Register/Memory"
+	case OpSsbAccImm:
+		return "SSB Immediate from Accumulator"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -235,6 +254,10 @@ func (op Operation) String() string {
 		return "aaa"
 	case OpBAA:
 		return "baa"
+	case OpSubRegRm, OpSubRmImm, OpSubAccImm:
+		return "sub"
+	case OpSsbRegRm, OpSsbRmImm, OpSsbAccImm:
+		return "ssb"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
 	}
@@ -924,14 +947,20 @@ func decode(text []byte) (insts []Instruction, err error) {
 			}
 			insts = append(insts, inst)
 		case (i1 & 0b11111100) == 0b10000000:
-			// @fixme(add-carry): same bits in i1 as with add (w/o carry), difference is only encoded in i2!
 			i2 := text[i]; i++
 			bs := make([]byte, 0, 6)
 			bs = append(bs, i1, i2)
 			s, w := SW(i1)
-			mod, zzz, rm := MODREGRM(i2)
-			if zzz != 0 {
-				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
+			mod, zxz, rm := MODREGRM(i2)
+			var op Operation
+			switch zxz {
+			default:
+				// @todo: SSB/SUB is also encoded here!
+				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			case 0b000: // ADD
+				op = OpAddRmImm
+			case 0b010: // ADC
+				op = OpAdcRmImm
 			}
 			var opRM Operand
 			dispHigh := byte(0)
@@ -969,7 +998,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte(bs),
-				operation: OpAddRmImm,
+				operation: op,
 				operands: Operands{
 					opRM,
 					Immediate{width: w, value: data},
@@ -1033,59 +1062,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				inst.operands = Operands{opReg, opRM}
 			}
 			insts = append(insts, inst)
-		case (i1 & 0b11111100) == 0b10000000:
-			// @fixme(add-carry): same bits in i1 as with add (w/o carry), difference is only encoded in i2!
-			// @fixme(disp)
-			i2 := text[i]; i++
-			bs := make([]byte, 0, 6)
-			bs = append(bs, i1, i2)
-			s, w := SW(i1)
-			mod, zoz, rm := MODREGRM(i2)
-			if zoz != 0b010 {
-				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
-			}
-			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				dispHigh = text[i]; i++
-				bs = append(bs, dispHigh)
-				fallthrough
-			case mod == 0b01:
-				dispLow = text[i]; i++
-				bs = append(bs, dispLow)
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
-				opRM = Register{name: rm, width: w}
-			}
-			data1 := text[i]; i++
-			bs = append(bs, data1)
-			// @fixme: s == 0 then don't sign extend [:sign-extend-s:]
-			data := int16(data1)
-			if s == 0 && w == 1 {
-				data2 := text[i]; i++
-				bs = append(bs, data2)
-				data = (int16(data2) << 8) ^ data
-			}
-			// @fixme: brother eewww [:slice-to-array:]
-			for len(bs) < 6 {
-				bs = append(bs, 0)
-			}
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte(bs),
-				operation: OpAdcRmImm,
-				operands: Operands{
-					opRM,
-					Immediate{width: w, value: data},
-				},
-			})
 		case (i1 & 0b11111110) == 0b00010100:
 			i2 := text[i]; i++
 			i3 := byte(0)
