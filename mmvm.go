@@ -115,6 +115,9 @@ const (
 	OpDecRm
 	OpDecReg
 	OpNeg
+	OpCmpRegRm
+	OpCmpRmImm
+	OpCmpAccImm
 
 	OpMul
 	OpImul
@@ -224,8 +227,12 @@ func (op Operation) Description() string {
 		return "DEC Register"
 	case OpNeg:
 		return "NEG Change Sign"
-	case OpIntType3:
-		return "INT Type 3"
+	case OpCmpRegRm:
+		return "CMP Register/Memory and Register"
+	case OpCmpRmImm:
+		return "CMP Immediate with Register/Memory"
+	case OpCmpAccImm:
+		return "CMP Immediate with Accumulator"
 	case OpMul:
 		return "mul"
 	case OpImul:
@@ -238,6 +245,8 @@ func (op Operation) Description() string {
 		return "not"
 	case OpTestRmImm:
 		return "test"
+	case OpIntType3:
+		return "INT Type 3"
 	case OpIntTypeSpecified:
 		return "INT Type Specified"
 	}
@@ -293,6 +302,8 @@ func (op Operation) String() string {
 		return "dec"
 	case OpNeg:
 		return "neg"
+	case OpCmpRegRm, OpCmpRmImm, OpCmpAccImm:
+		return "cmp"
 	case OpMul:
 		return "MUL Multiply (Unsigned)"
 	case OpImul:
@@ -1011,6 +1022,8 @@ func decode(text []byte) (insts []Instruction, err error) {
 				op = OpSubRmImm
 			case 0b011:
 				op = OpSsbRmImm
+			case 0b111:
+				op = OpCmpRmImm
 			}
 			var opRM Operand
 			dispHigh := byte(0)
@@ -1338,7 +1351,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
 			case 0b000:
 				op = OpTestRmImm
-				// @fixme: has one or two data bytes!!!
+				// @fixme(test): has one or two data bytes!!!
 			case 0b010:
 				op = OpNot
 			case 0b011:
@@ -1378,6 +1391,64 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operation: op,
 				operands: Operands{
 					opRM,
+				},
+			})
+		case (i1 & 0b11111100) == 0b00111000:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
+			d, w := DW(i1)
+			mod, reg, rm := MODREGRM(i2)
+			opReg := Register{name: reg, width: w}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: w}
+			}
+			inst := Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4},
+				operation: OpCmpRegRm,
+				operands: nil,
+			}
+			if d == 0 { // from reg
+				inst.operands = Operands{opRM, opReg}
+			} else { // to reg
+				inst.operands = Operands{opReg, opRM}
+			}
+			insts = append(insts, inst)
+		case (i1 & 0b11111110) == 0b00111100:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			w := W(i1)
+			data := int16(i2)
+			if w == 1 {
+				i3 = text[i]; i++
+				data = (int16(i3) << 8) ^ data
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3},
+				operation: OpCmpAccImm,
+				operands: Operands{
+					Register{name: RegA, width: w},
+					Immediate{width: w, value: data},
 				},
 			})
 		case i1 == 0b11001100:
