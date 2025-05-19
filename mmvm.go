@@ -139,8 +139,15 @@ const (
 	OpAndRegRm
 	OpAndRmImm
 	OpAndAccImm
-
+	OpTestRegRm
 	OpTestRmImm
+	OpTestAccImm
+	OpOrRegRm
+	OpOrRmImm
+	OpOrAccImm
+	OpXorRegRm
+	OpXorRmImm
+	OpXorAccImm
 
 	OpIntType3
 	OpIntTypeSpecified
@@ -288,8 +295,24 @@ func (op Operation) Description() string {
 		return "AND Immediate to Register/Memory"
 	case OpAndAccImm:
 		return "AND Immediate to Accumulator"
+	case OpTestRegRm:
+		return "TEST Register/Memory and Register"
 	case OpTestRmImm:
 		return "TEST Immediate Data and Register/Memory"
+	case OpTestAccImm:
+		return "TEST Immediate Data and Accumulator"
+	case OpOrRegRm:
+		return "OR Register/Memory and Register to Either"
+	case OpOrRmImm:
+		return "OR Immediate to Register/Memory"
+	case OpOrAccImm:
+		return "OR Immediate to Accumulator"
+	case OpXorRegRm:
+		return "XOR Register/Memory and Register to Either"
+	case OpXorRmImm:
+		return "XOR Immediate to Register/Memory"
+	case OpXorAccImm:
+		return "XOR Immediate to Accumulator"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -387,8 +410,12 @@ func (op Operation) String() string {
 		return "rcr"
 	case OpAndRegRm, OpAndRmImm, OpAndAccImm:
 		return "and"
-	case OpTestRmImm:
+	case OpTestRegRm, OpTestRmImm, OpTestAccImm:
 		return "test"
+	case OpOrRegRm, OpOrRmImm, OpOrAccImm:
+		return "or"
+	case OpXorRegRm, OpXorRmImm, OpXorAccImm:
+		return "xor"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
 	}
@@ -1697,6 +1724,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
 			case 0b100:
 				op = OpAndRmImm
+			case 0b001:
+				op = OpOrRmImm
+			case 0b110:
+				op = OpXorRmImm
 			}
 			var opRM Operand
 			dispHigh := byte(0)
@@ -1753,6 +1784,58 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2,i3},
 				operation: OpAndAccImm,
+				operands: Operands{
+					Register{name: RegA, width: w},
+					Immediate{width: w, value: data},
+				},
+			})
+		case (i1 & 0b11111110) == 0b10000100:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
+			w := W(i1)
+			mod, reg, rm := MODREGRM(i2)
+			opReg := Register{name: reg, width: w}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: w}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4},
+				operation: OpCmpRegRm,
+				operands: Operands{opReg, opRM},
+			})
+		case (i1 & 0b11111110) == 0b10101000:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			w := W(i1)
+			data := int16(i2)
+			if w == 1 {
+				i3 = text[i]; i++
+				data = (int16(i3) << 8) ^ data
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3},
+				operation: OpTestAccImm,
 				operands: Operands{
 					Register{name: RegA, width: w},
 					Immediate{width: w, value: data},
