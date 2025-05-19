@@ -157,6 +157,8 @@ func (op Operation) Description() string {
 	switch op {
 	default:
 		panic("unknown operation")
+	case OpInvalid:
+		panic("invalid operation")
 	case OpMovRegRm:
 		return "MOV Register/Memory to/from Register"
 	case OpMovRmImm:
@@ -324,6 +326,8 @@ func (op Operation) String() string {
 	switch op {
 	default:
 		panic("unknown operation")
+	case OpInvalid:
+		panic("invalid operation")
 	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
 		return "mov"
 	case OpPushRm, OpPushReg, OpPushSeg:
@@ -1118,7 +1122,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			bs = append(bs, i1, i2)
 			s, w := SW(i1)
 			mod, zxz, rm := MODREGRM(i2)
-			var op Operation
+			var (
+				op Operation
+				sMustBeZero bool
+			)
 			switch zxz {
 			default:
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
@@ -1132,6 +1139,15 @@ func decode(text []byte) (insts []Instruction, err error) {
 				op = OpSsbRmImm
 			case 0b111:
 				op = OpCmpRmImm
+			case 0b100:
+				op = OpAndRmImm
+				sMustBeZero = true
+			case 0b001:
+				op = OpOrRmImm
+				sMustBeZero = true
+			case 0b110:
+				op = OpXorRmImm
+				sMustBeZero = true
 			}
 			var opRM Operand
 			dispHigh := byte(0)
@@ -1156,6 +1172,9 @@ func decode(text []byte) (insts []Instruction, err error) {
 			bs = append(bs, data1)
 			// @fixme: s == 0 then don't sign extend [:sign-extend-s:]
 			data := int16(data1)
+			if sMustBeZero && s != 0 {
+				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			}
 			if s == 0 && w == 1 {
 				data2 := text[i]; i++
 				bs = append(bs, data2)
@@ -1711,65 +1730,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				inst.operands = Operands{opReg, opRM}
 			}
 			insts = append(insts, inst)
-		case (i1 & 0b11111110) == 0b0000000:
-			// @todo
-			i2 := text[i]; i++
-			bs := make([]byte, 0, 6)
-			bs = append(bs, i1, i2)
-			w := W(i1)
-			mod, xxx, rm := MODREGRM(i2)
-			var op Operation
-			switch xxx {
-			default:
-				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
-			case 0b100:
-				op = OpAndRmImm
-			case 0b001:
-				op = OpOrRmImm
-			case 0b110:
-				op = OpXorRmImm
-			}
-			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				dispHigh = text[i]; i++
-				bs = append(bs, dispHigh)
-				fallthrough
-			case mod == 0b01:
-				dispLow = text[i]; i++
-				bs = append(bs, dispLow)
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
-				opRM = Register{name: rm, width: w}
-			}
-			data1 := text[i]; i++
-			bs = append(bs, data1)
-			data := int16(data1)
-			if w == 1 {
-				data2 := text[i]; i++
-				bs = append(bs, data2)
-				data = (int16(data2) << 8) ^ data
-			}
-			// @fixme: brother eewww [:slice-to-array:]
-			for len(bs) < 6 {
-				bs = append(bs, 0)
-			}
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte(bs),
-				operation: op,
-				operands: Operands{
-					opRM,
-					Immediate{width: w, value: data},
-				},
-			})
 		case (i1 & 0b11111110) == 0b00100100:
 			i2 := text[i]; i++
 			i3 := byte(0)
