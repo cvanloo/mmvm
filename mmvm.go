@@ -128,8 +128,14 @@ const (
 	OpAAD
 	OpCBW
 	OpCWD
-
 	OpNot
+	OpShlSal
+	OpShr
+	OpSar
+	OpRol
+	OpRor
+	OpRcl
+	OpRcr
 
 	OpTestRmImm
 
@@ -259,6 +265,20 @@ func (op Operation) Description() string {
 		return "CWD Convert Word to Double Word"
 	case OpNot:
 		return "NOT Invert"
+	case OpShlSal:
+		return "SHL/SAL Shift Logical/Arithmetic Left"
+	case OpShr:
+		return "SHR Shift Logical Right"
+	case OpSar:
+		return "SAR Shift Arithmetic Right"
+	case OpRol:
+		return "ROL Rotate Left"
+	case OpRor:
+		return "ROR Rotate Right"
+	case OpRcl:
+		return "RCL Rotate Through Carry Flag Left"
+	case OpRcr:
+		return "RCR Rotate Through Carry Right"
 	case OpTestRmImm:
 		return "TEST Immediate Data and Register/Memory"
 	case OpIntType3:
@@ -342,6 +362,20 @@ func (op Operation) String() string {
 		return "cwd"
 	case OpNot:
 		return "not"
+	case OpShlSal:
+		return "shl" // or sal
+	case OpShr:
+		return "shr"
+	case OpSar:
+		return "sar"
+	case OpRol:
+		return "rol"
+	case OpRor:
+		return "ror"
+	case OpRcl:
+		return "rcl"
+	case OpRcr:
+		return "rcr"
 	case OpTestRmImm:
 		return "test"
 	case OpIntType3, OpIntTypeSpecified:
@@ -443,11 +477,19 @@ func SW(i byte) (s, w byte) {
 	return S(i), W(i)
 }
 
+func VW(i byte) (v, w byte) {
+	return V(i), W(i)
+}
+
 func D(i byte) byte {
 	return (i >> 1) & 1
 }
 
 func S(i byte) byte {
+	return (i >> 1) & 1
+}
+
+func V(i byte) byte {
 	return (i >> 1) & 1
 }
 
@@ -1535,6 +1577,63 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operation: OpCWD,
 				operands: nil,
 			})
+		case (i1 & 0b11111100) == 0b11010000:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
+			v, w := VW(i1)
+			mod, xxx, rm := MODREGRM(i2)
+			var op Operation
+			switch xxx {
+			default:
+				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			case 0b100:
+				op = OpShlSal
+			case 0b101:
+				op = OpShr
+			case 0b111:
+				op = OpSar
+			case 0b000:
+				op = OpRol
+			case 0b001:
+				op = OpRor
+			case 0b010:
+				op = OpRcl
+			case 0b011:
+				op = OpRcr
+			}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: w}
+			}
+			inst := Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4},
+				operation: op,
+				operands: nil,
+			}
+			if v == 0 {
+				inst.operands = Operands{opRM, Immediate{width: 0, value: 1}}
+			} else { // to reg
+				inst.operands = Operands{opRM, Register{name: RegC, width: 0}}
+			}
+			insts = append(insts, inst)
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
 				offset: offset,
