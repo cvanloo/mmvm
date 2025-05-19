@@ -136,6 +136,9 @@ const (
 	OpRor
 	OpRcl
 	OpRcr
+	OpAndRegRm
+	OpAndRmImm
+	OpAndAccImm
 
 	OpTestRmImm
 
@@ -279,6 +282,12 @@ func (op Operation) Description() string {
 		return "RCL Rotate Through Carry Flag Left"
 	case OpRcr:
 		return "RCR Rotate Through Carry Right"
+	case OpAndRegRm:
+		return "AND Register/Memory and Register to Either"
+	case OpAndRmImm:
+		return "AND Immediate to Register/Memory"
+	case OpAndAccImm:
+		return "AND Immediate to Accumulator"
 	case OpTestRmImm:
 		return "TEST Immediate Data and Register/Memory"
 	case OpIntType3:
@@ -376,6 +385,8 @@ func (op Operation) String() string {
 		return "rcl"
 	case OpRcr:
 		return "rcr"
+	case OpAndRegRm, OpAndRmImm, OpAndAccImm:
+		return "and"
 	case OpTestRmImm:
 		return "test"
 	case OpIntType3, OpIntTypeSpecified:
@@ -1628,12 +1639,125 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operation: op,
 				operands: nil,
 			}
-			if v == 0 {
+			if v == 0 { // count is 1
 				inst.operands = Operands{opRM, Immediate{width: 0, value: 1}}
-			} else { // to reg
+			} else { // count is in CL
 				inst.operands = Operands{opRM, Register{name: RegC, width: 0}}
 			}
 			insts = append(insts, inst)
+		case (i1 & 0b11111100) == 0b00100000:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
+			d, w := DW(i1)
+			mod, reg, rm := MODREGRM(i2)
+			opReg := Register{name: reg, width: w}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: w}
+			}
+			inst := Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4},
+				operation: OpAndRegRm,
+				operands: nil,
+			}
+			if d == 0 { // from reg
+				inst.operands = Operands{opRM, opReg}
+			} else { // to reg
+				inst.operands = Operands{opReg, opRM}
+			}
+			insts = append(insts, inst)
+		case (i1 & 0b11111110) == 0b0000000:
+			// @todo
+			i2 := text[i]; i++
+			bs := make([]byte, 0, 6)
+			bs = append(bs, i1, i2)
+			w := W(i1)
+			mod, xxx, rm := MODREGRM(i2)
+			var op Operation
+			switch xxx {
+			default:
+				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
+			case 0b100:
+				op = OpAndRmImm
+			}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				dispHigh = text[i]; i++
+				bs = append(bs, dispHigh)
+				fallthrough
+			case mod == 0b01:
+				dispLow = text[i]; i++
+				bs = append(bs, dispLow)
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: w}
+			}
+			data1 := text[i]; i++
+			bs = append(bs, data1)
+			data := int16(data1)
+			if w == 1 {
+				data2 := text[i]; i++
+				bs = append(bs, data2)
+				data = (int16(data2) << 8) ^ data
+			}
+			// @fixme: brother eewww [:slice-to-array:]
+			for len(bs) < 6 {
+				bs = append(bs, 0)
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte(bs),
+				operation: op,
+				operands: Operands{
+					opRM,
+					Immediate{width: w, value: data},
+				},
+			})
+		case (i1 & 0b11111110) == 0b00100100:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			w := W(i1)
+			data := int16(i2)
+			if w == 1 {
+				i3 = text[i]; i++
+				data = (int16(i3) << 8) ^ data
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3},
+				operation: OpAndAccImm,
+				operands: Operands{
+					Register{name: RegA, width: w},
+					Immediate{width: w, value: data},
+				},
+			})
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -1664,7 +1788,7 @@ func must[T any](t T, err error) T {
 }
 
 func main() {
-	bin := must(os.ReadFile("a.out"))
+	bin := must(os.ReadFile("a3.out"))
 	exec := *(*Exec)(unsafe.Pointer(&bin[0]))
 	fmt.Printf("%#v\n", exec)
 	text := bin[32:32+exec.sizeText]
