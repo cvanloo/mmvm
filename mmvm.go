@@ -118,12 +118,16 @@ const (
 	OpCmpRegRm
 	OpCmpRmImm
 	OpCmpAccImm
-
+	OpAAS
+	OpDAS
 	OpMul
 	OpImul
-
+	OpAAM
 	OpDiv
-	OPIdiv
+	OpIdiv
+	OpAAD
+	OpCBW
+	OpCWD
 
 	OpNot
 
@@ -233,18 +237,30 @@ func (op Operation) Description() string {
 		return "CMP Immediate with Register/Memory"
 	case OpCmpAccImm:
 		return "CMP Immediate with Accumulator"
+	case OpAAS:
+		return "AAS ASCII Adjust for Subtract"
+	case OpDAS:
+		return "DAS Decimal Adjust for Subtract"
 	case OpMul:
-		return "mul"
+		return "MUL Multiply (Unsigned)"
 	case OpImul:
-		return "imul"
+		return "IMUL Integer Multiply (Signed)"
+	case OpAAM:
+		return "AAM ASCII Adjust for Multiply"
 	case OpDiv:
-		return "div"
-	case OPIdiv:
-		return "idiv"
+		return "DIV Divide (Unsigned)"
+	case OpIdiv:
+		return "IDIV Integer Divide (Signed)"
+	case OpAAD:
+		return "AAD ASCII Adjust for Divide"
+	case OpCBW:
+		return "CBW Convert Byte to Word"
+	case OpCWD:
+		return "CWD Convert Word to Double Word"
 	case OpNot:
-		return "not"
+		return "NOT Invert"
 	case OpTestRmImm:
-		return "test"
+		return "TEST Immediate Data and Register/Memory"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -304,18 +320,30 @@ func (op Operation) String() string {
 		return "neg"
 	case OpCmpRegRm, OpCmpRmImm, OpCmpAccImm:
 		return "cmp"
+	case OpAAS:
+		return "aas"
+	case OpDAS:
+		return "das"
 	case OpMul:
-		return "MUL Multiply (Unsigned)"
+		return "mul"
 	case OpImul:
-		return "IMUL Integer Multiply (Signed)"
+		return "imul"
+	case OpAAM:
+		return "aam"
 	case OpDiv:
-		return "DIV Divide (Unsigned)"
-	case OPIdiv:
-		return "IDIV Integer Divide (Signed)"
+		return "div"
+	case OpIdiv:
+		return "idiv"
+	case OpAAD:
+		return "aad"
+	case OpCBW:
+		return "cbw"
+	case OpCWD:
+		return "cwd"
 	case OpNot:
-		return "NOT Invert"
+		return "not"
 	case OpTestRmImm:
-		return "TEST Immediate Data and Register/Memory"
+		return "test"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
 	}
@@ -1363,7 +1391,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			case 0b110:
 				op = OpDiv
 			case 0b111:
-				op = OPIdiv
+				op = OpIdiv
 			}
 			var opRM Operand
 			dispHigh := byte(0)
@@ -1450,6 +1478,62 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Register{name: RegA, width: w},
 					Immediate{width: w, value: data},
 				},
+			})
+		case i1 == 0b00111111:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpAAS,
+				operands: nil,
+			})
+		case i1 == 0b00101111:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpDAS,
+				operands: nil,
+			})
+		case i1 == 0b11010100:
+			i2 := text[i]; i++
+			if i2 != 0b00001010 {
+				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpAAM,
+				operands: nil,
+			})
+		case i1 == 0b11010101:
+			i2 := text[i]; i++
+			if i2 != 0b00001010 {
+				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpAAD,
+				operands: nil,
+			})
+		case i1 == 0b10011000:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpCBW,
+				operands: nil,
+			})
+		case i1 == 0b10011001:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpCWD,
+				operands: nil,
 			})
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
