@@ -1725,21 +1725,52 @@ func decode(text []byte) (insts []Instruction, err error) {
 			})
 		case (i1 & 0b11111110) == 0b11110110:
 			i2 := text[i]; i++
-			i3 := byte(0)
-			i4 := byte(0)
+			bs := make([]byte, 0, 6)
+			bs = append(bs, i1, i2)
 			w := W(i1)
 			mod, xxx, rm := MODREGRM(i2)
+			var opRM Operand
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 := text[i]; i++
+					bs = append(bs, i3)
+					i4 := text[i]; i++
+					bs = append(bs, i4)
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
+				i3 := text[i]; i++
+				bs = append(bs, i3)
+				i4 := text[i]; i++
+				bs = append(bs, i4)
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 := text[i]; i++
+				bs = append(bs, i3)
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
+				opRM = Register{name: rm, width: w}
+			}
 			var op Operation
+			operands := Operands{opRM}
 			switch xxx {
 			default:
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
 			case 0b000:
 				op = OpTestRmImm
 				// @fixme(test): has one or two data bytes!!!
-				_ = text[i]; i++
+				data1 := text[i]; i++
+				bs = append(bs, data1)
+				data := int16(data1)
 				if w == 1 {
-					_ = text[i]; i++
+					data2 := text[i]; i++
+					bs = append(bs, data2)
+					data = (int16(data2) << 8) ^ data
 				}
+				operands = Operands{opRM, Immediate{width: w, value: data}}
 			case 0b010:
 				op = OpNot
 			case 0b011:
@@ -1753,34 +1784,15 @@ func decode(text []byte) (insts []Instruction, err error) {
 			case 0b111:
 				op = OpIdiv
 			}
-			var opRM Operand
-			switch mod {
-			case 0b00:
-				if rm == 0b110 {
-					i3 = text[i]; i++
-					i4 = text[i]; i++
-					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
-				} else {
-					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
-				}
-			case 0b10:
-				i3 = text[i]; i++
-				i4 = text[i]; i++
-				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
-			case 0b01:
-				i3 = text[i]; i++
-				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
-			case 0b11:
-				opRM = Register{name: rm, width: w}
+			for len(bs) < 6 {
+				bs = append(bs, 0)
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,i4},
+				bytes: [6]byte(bs),
 				operation: op,
-				operands: Operands{
-					opRM,
-				},
+				operands: operands,
 			})
 		case (i1 & 0b11111100) == 0b00111000:
 			i2 := text[i]; i++
@@ -2045,7 +2057,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2,i3,i4},
-				operation: OpCmpRegRm,
+				operation: OpTestRegRm,
 				operands: Operands{opReg, opRM},
 			})
 		case (i1 & 0b11111110) == 0b10101000:
