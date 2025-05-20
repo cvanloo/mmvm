@@ -57,6 +57,9 @@ type (
 	}
 	Immediate struct {
 		width byte
+		value uint16
+	}
+	ImmediateNumber struct {
 		value int16
 	}
 )
@@ -749,10 +752,18 @@ func (imm Immediate) String() string {
 }
 
 func (imm Immediate) AsmString() string {
-	//return fmt.Sprintf("%0[1]*x", (imm.width+1)*2, imm.value)
+	return fmt.Sprintf("%0[1]*x", (imm.width+1)*2, imm.value)
 	//return fmt.Sprintf("%04x", uint16(imm.value))
 	// @todo: create UnpaddedImmediate
 	//	return fmt.Sprintf("%x", imm.value)
+}
+
+func (imm ImmediateNumber) String() string {
+	return imm.AsmString()
+}
+
+func (imm ImmediateNumber) AsmString() string {
+	return fmt.Sprintf("%x", imm.value)
 }
 
 func (inst Instruction) String() string {
@@ -876,31 +887,37 @@ func decode(text []byte) (insts []Instruction, err error) {
 				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
 			}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				dispHigh = text[i]; i++
-				bs = append(bs, dispHigh)
-				fallthrough
-			case mod == 0b01:
-				dispLow = text[i]; i++
-				bs = append(bs, dispLow)
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 := text[i]; i++
+					bs = append(bs, i3)
+					i4 := text[i]; i++
+					bs = append(bs, i4)
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
+				i3 := text[i]; i++
+				bs = append(bs, i3)
+				i4 := text[i]; i++
+				bs = append(bs, i4)
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 := text[i]; i++
+				bs = append(bs, i3)
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			data1 := text[i]; i++
 			bs = append(bs, data1)
-			data := int16(data1)
+			data := uint16(data1)
 			if w == 1 {
 				data2 := text[i]; i++
 				bs = append(bs, data2)
-				data = (int16(data2) << 8) ^ data
+				data = (uint16(data2) << 8) ^ data
 			}
 			// @fixme: brother eewww [:slice-to-array:]
 			for len(bs) < 6 {
@@ -920,10 +937,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i2 := text[i]; i++
 			i3 := byte(0)
 			w, reg := WREG(i1)
-			data := int16(i2)
+			data := uint16(i2)
 			if w == 1 {
 				i3 = text[i]; i++
-				data = (int16(i3) << 8) ^ data
+				data = (uint16(i3) << 8) ^ data
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -1085,22 +1102,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			w := W(i1)
 			mod, reg, rm := MODREGRM(i2)
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			insts = append(insts, Instruction {
@@ -1125,7 +1143,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 		case (i1 & 0b11111110) == 0b11100100:
 			//w := W(i1)
 			i2 := text[i]; i++
-			port := int16(i2)
+			port := uint16(i2)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
@@ -1147,7 +1165,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 		case (i1 & 0b11111110) == 0b11100110:
 			//w := W(i1)
 			i2 := text[i]; i++
-			port := int16(i2)
+			port := uint16(i2)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
@@ -1385,29 +1403,27 @@ func decode(text []byte) (insts []Instruction, err error) {
 				sMustBeZero = true
 			}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
 			switch mod {
 			case 0b00:
 				if rm == 0b110 {
-					dispLow = text[i]; i++
-					bs = append(bs, dispLow)
-					dispHigh = text[i]; i++
-					bs = append(bs, dispHigh)
-					opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+					i3 := text[i]; i++
+					bs = append(bs, i3)
+					i4 := text[i]; i++
+					bs = append(bs, i4)
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
 				} else {
 					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
 				}
 			case 0b10:
-				dispLow = text[i]; i++
-				bs = append(bs, dispLow)
-				dispHigh = text[i]; i++
-				bs = append(bs, dispHigh)
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+				i3 := text[i]; i++
+				bs = append(bs, i3)
+				i4 := text[i]; i++
+				bs = append(bs, i4)
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
 			case 0b01:
-				dispLow = text[i]; i++
-				bs = append(bs, dispLow)
-				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: dispLow}
+				i3 := text[i]; i++
+				bs = append(bs, i3)
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
 			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
@@ -1434,7 +1450,8 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operation: op,
 				operands: Operands{
 					opRM,
-					Immediate{width: w, value: data},
+					// @fixme: depends on if RM is R or M
+					ImmediateNumber{value: data},
 				},
 			})
 		case (i1 & 0b11111110) == 0b00000100:
@@ -1453,7 +1470,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operation: OpAddAccImm,
 				operands: Operands{
 					Register{name: RegA, width: w},
-					Immediate{width: w, value: data},
+					ImmediateNumber{value: data},
 				},
 			})
 		case (i1 & 0b11111100) == 0b00010000:
@@ -1500,10 +1517,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i2 := text[i]; i++
 			i3 := byte(0)
 			w := W(i1)
-			data := int16(i3)
+			data := uint16(i3)
 			if w == 1 {
 				i3 = text[i]; i++
-				data = (int16(i3) << 8) ^ data
+				data = (uint16(i3) << 8) ^ data
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -1639,10 +1656,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i2 := text[i]; i++
 			i3 := byte(0)
 			w := W(i1)
-			data := int16(i2)
+			data := uint16(i2)
 			if w == 1 {
 				i3 = text[i]; i++
-				data = (int16(i3) << 8) ^ data
+				data = (uint16(i3) << 8) ^ data
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -1698,10 +1715,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i2 := text[i]; i++
 			i3 := byte(0)
 			w := W(i1)
-			data := int16(i3)
+			data := uint16(i3)
 			if w == 1 {
 				i3 = text[i]; i++
-				data = (int16(i3) << 8) ^ data
+				data = (uint16(i3) << 8) ^ data
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -1762,7 +1779,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
 			case 0b000:
 				op = OpTestRmImm
-				// @fixme(test): has one or two data bytes!!!
 				data1 := text[i]; i++
 				bs = append(bs, data1)
 				data := int16(data1)
@@ -1771,7 +1787,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 					bs = append(bs, data2)
 					data = (int16(data2) << 8) ^ data
 				}
-				operands = Operands{opRM, Immediate{width: w, value: data}}
+				operands = Operands{opRM, ImmediateNumber{value: data}}
 			case 0b010:
 				op = OpNot
 			case 0b011:
@@ -1839,10 +1855,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i2 := text[i]; i++
 			i3 := byte(0)
 			w := W(i1)
-			data := int16(i2)
+			data := uint16(i2)
 			if w == 1 {
 				i3 = text[i]; i++
-				data = (int16(i3) << 8) ^ data
+				data = (uint16(i3) << 8) ^ data
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -1963,7 +1979,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: nil,
 			}
 			if v == 0 { // count is 1
-				inst.operands = Operands{opRM, Immediate{width: 0, value: 1}}
+				inst.operands = Operands{opRM, ImmediateNumber{value: 1}}
 			} else { // count is in CL
 				inst.operands = Operands{opRM, Register{name: RegC, width: 0}}
 			}
@@ -2012,10 +2028,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i2 := text[i]; i++
 			i3 := byte(0)
 			w := W(i1)
-			data := int16(i2)
+			data := uint16(i2)
 			if w == 1 {
 				i3 = text[i]; i++
-				data = (int16(i3) << 8) ^ data
+				data = (uint16(i3) << 8) ^ data
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -2065,10 +2081,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i2 := text[i]; i++
 			i3 := byte(0)
 			w := W(i1)
-			data := int16(i2)
+			data := uint16(i2)
 			if w == 1 {
 				i3 = text[i]; i++
-				data = (int16(i3) << 8) ^ data
+				data = (uint16(i3) << 8) ^ data
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -2164,10 +2180,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i2 := text[i]; i++
 			i3 := byte(0)
 			w := W(i1)
-			data := int16(i2)
+			data := uint16(i2)
 			if w == 1 {
 				i3 = text[i]; i++
-				data = (int16(i3) << 8) ^ data
+				data = (uint16(i3) << 8) ^ data
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -2183,10 +2199,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i2 := text[i]; i++
 			i3 := byte(0)
 			w := W(i1)
-			data := int16(i2)
+			data := uint16(i2)
 			if w == 1 {
 				i3 = text[i]; i++
-				data = (int16(i3) << 8) ^ data
+				data = (uint16(i3) << 8) ^ data
 			}
 			insts = append(insts, Instruction {
 				offset: offset,
@@ -2263,13 +2279,13 @@ func decode(text []byte) (insts []Instruction, err error) {
 		case i1 == 0b11101000:
 			i2 := text[i]; i++
 			i3 := text[i]; i++
-			disp := (int16(i3) << 8) ^ int16(i2)
+			disp := (uint16(i3) << 8) ^ uint16(i2)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2,i3},
 				operation: OpCallDirSeg,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 3) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 3) + disp}},
 			})
 		case i1 == 0b10011010:
 			i2 := text[i]; i++
@@ -2288,23 +2304,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 		case i1 == 0b11101001:
 			i2 := text[i]; i++
 			i3 := text[i]; i++
-			disp := (int16(i3) << 8) ^ int16(i2)
+			disp := (uint16(i3) << 8) ^ uint16(i2)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2,i3},
 				operation: OpJmpDirSeg,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 3) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 3) + disp}},
 			})
 		case i1 == 0b11101011:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int8(i2))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJmpShortDirSeg,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b11101010:
 			i2 := text[i]; i++
@@ -2331,7 +2347,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 		case i1 == 0b11000010:
 			i2 := text[i]; i++
 			i3 := text[i]; i++
-			data := (int16(i3) << 8) ^ int16(i2)
+			data := (uint16(i3) << 8) ^ uint16(i2)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
@@ -2350,7 +2366,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 		case i1 == 0b11001010:
 			i2 := text[i]; i++
 			i3 := text[i]; i++
-			data := (int16(i3) << 8) ^ int16(i2)
+			data := (uint16(i3) << 8) ^ uint16(i2)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
@@ -2360,203 +2376,203 @@ func decode(text []byte) (insts []Instruction, err error) {
 			})
 		case i1 == 0b01110100:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2))) // @todo: is this correct?
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJe,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111100:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJl,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111110:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJle,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110010:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJb,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110110:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJbe,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111010:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJp,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110000:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJo,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111000:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJs,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110101:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJne,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111101:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJnl,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111111:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJnle,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110011:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJnb,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110111:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJnbe,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111011:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJnp,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110001:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJno,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111001:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJns,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b11100010:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpLoop,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b11100001:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpLoopz,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b11100000:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpLoopnz,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b11100011:
 			i2 := text[i]; i++
-			disp := int16(int8(i2))
+			disp := uint16(int16(int8(i2)))
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJcxz,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
+				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
 			})
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
@@ -2573,7 +2589,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpIntTypeSpecified,
-				operands: Operands{Immediate{width: 0, value: int16(i2)}},
+				operands: Operands{Immediate{width: 0, value: uint16(i2)}},
 			})
 		case i1 == 0b11001110:
 			insts = append(insts, Instruction {
