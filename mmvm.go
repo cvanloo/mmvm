@@ -532,7 +532,7 @@ func (op Operation) String() string {
 	case OpSubRegRm, OpSubRmImm, OpSubAccImm:
 		return "sub"
 	case OpSsbRegRm, OpSsbRmImm, OpSsbAccImm:
-		return "ssb"
+		return "sbb"
 	case OpDecRm, OpDecReg:
 		return "dec"
 	case OpNeg:
