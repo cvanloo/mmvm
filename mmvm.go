@@ -1214,22 +1214,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i4 := byte(0)
 			mod, reg, rm := MODREGRM(i2)
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: 1}
 			}
 			insts = append(insts, Instruction {
@@ -1248,22 +1249,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i4 := byte(0)
 			mod, reg, rm := MODREGRM(i2)
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: 1}
 			}
 			insts = append(insts, Instruction {
@@ -1316,22 +1318,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			mod, reg, rm := MODREGRM(i2)
 			opReg := Register{name: reg, width: w}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			inst := Instruction {
@@ -1460,22 +1463,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			mod, reg, rm := MODREGRM(i2)
 			opReg := Register{name: reg, width: w}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			inst := Instruction {
@@ -1536,22 +1540,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			}
 			w := W(i1)
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				// @todo: validate that in all cases except for IncRm and DecRm w is always 1
 				opRM = Register{name: rm, width: w}
 			}
@@ -1597,22 +1602,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			mod, reg, rm := MODREGRM(i2)
 			opReg := Register{name: reg, width: w}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			inst := Instruction{
@@ -1655,22 +1661,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			mod, reg, rm := MODREGRM(i2)
 			opReg := Register{name: reg, width: w}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			inst := Instruction {
@@ -1747,22 +1754,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 				op = OpIdiv
 			}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			insts = append(insts, Instruction {
@@ -1782,22 +1790,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			mod, reg, rm := MODREGRM(i2)
 			opReg := Register{name: reg, width: w}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			inst := Instruction {
@@ -1914,22 +1923,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 				op = OpRcr
 			}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			inst := Instruction {
@@ -1953,22 +1963,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			mod, reg, rm := MODREGRM(i2)
 			opReg := Register{name: reg, width: w}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			inst := Instruction {
@@ -2011,22 +2022,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			mod, reg, rm := MODREGRM(i2)
 			opReg := Register{name: reg, width: w}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			insts = append(insts, Instruction {
@@ -2063,22 +2075,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			mod, reg, rm := MODREGRM(i2)
 			opReg := Register{name: reg, width: w}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			inst := Instruction {
@@ -2102,22 +2115,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			mod, reg, rm := MODREGRM(i2)
 			opReg := Register{name: reg, width: w}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			inst := Instruction {
@@ -2650,22 +2664,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			i4 := byte(0)
 			mod, _, rm := MODREGRM(i2)
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: 1}
 			}
 			insts = append(insts, Instruction {
