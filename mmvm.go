@@ -753,7 +753,11 @@ func (imm Immediate) AsmString() string {
 }
 
 func (inst Instruction) String() string {
-	return fmt.Sprintf("%04x: %-13x %s %s", inst.offset, inst.bytes[:inst.size], inst.operation, inst.operands)
+	if len(inst.operands) > 0 {
+		return fmt.Sprintf("%04x: %-13x %s %s", inst.offset, inst.bytes[:inst.size], inst.operation, inst.operands)
+	} else {
+		return fmt.Sprintf("%04x: %-13x %s", inst.offset, inst.bytes[:inst.size], inst.operation)
+	}
 }
 
 func W(i byte) byte {
