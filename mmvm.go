@@ -1,12 +1,14 @@
 package main
 
 import (
-	"unsafe"
+	//"unsafe"
 	"fmt"
 	"os"
 	"strings"
 	"errors"
-	//"encoding/binary" // @todo: do the parsing properly
+	"encoding/binary"
+	"bytes"
+	"log"
 )
 
 // @fixme: sign extension is only perform by doing a double cast int16(int8(byte))
@@ -14,13 +16,13 @@ import (
 
 type (
 	Exec struct {
-		dontCareForNow int64
-		sizeText int32
-		sizeData int32
-		sizeBSS int32
-		entryPoint int32
-		memTotal int32
-		sizeSym int32
+		DontCareForNow int64
+		SizeText int32
+		SizeData int32
+		SizeBSS int32
+		EntryPoint int32
+		MemTotal int32
+		SizeSym int32
 	}
 	Operation int
 	Operand interface {
@@ -2733,9 +2735,13 @@ func must[T any](t T, err error) T {
 
 func main() {
 	bin := must(os.ReadFile("a3.out"))
-	exec := *(*Exec)(unsafe.Pointer(&bin[0]))
+	//exec := *(*Exec)(unsafe.Pointer(&bin[0]))
+	var exec Exec
+	if err := binary.Read(bytes.NewReader(bin), binary.LittleEndian, &exec); err != nil {
+		log.Fatal(err)
+	}
 	fmt.Printf("%#v\n", exec)
-	text := bin[32:32+exec.sizeText]
+	text := bin[32:32+exec.SizeText]
 	fmt.Printf("%x\n", text)
 
 	insts, err := decode(text)
