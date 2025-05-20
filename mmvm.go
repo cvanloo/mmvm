@@ -1597,7 +1597,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: Operands{opRM},
 			})
 		case (i1 & 0b11111000) == 0b01000000:
-			reg := REG(i1)
+			reg := REG1(i1)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
