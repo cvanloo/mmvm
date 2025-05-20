@@ -1382,20 +1382,28 @@ func decode(text []byte) (insts []Instruction, err error) {
 			var opRM Operand
 			dispHigh := byte(0)
 			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				dispHigh = text[i]; i++
-				bs = append(bs, dispHigh)
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					dispLow = text[i]; i++
+					bs = append(bs, dispLow)
+					dispHigh = text[i]; i++
+					bs = append(bs, dispHigh)
+					opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				dispLow = text[i]; i++
 				bs = append(bs, dispLow)
-				fallthrough
-			case mod == 0b00:
+				dispHigh = text[i]; i++
+				bs = append(bs, dispHigh)
 				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+			case 0b01:
+				dispLow = text[i]; i++
+				bs = append(bs, dispLow)
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: dispLow}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			data1 := text[i]; i++
