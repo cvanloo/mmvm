@@ -750,6 +750,8 @@ func (imm Immediate) String() string {
 
 func (imm Immediate) AsmString() string {
 	return fmt.Sprintf("%0[1]*x", (imm.width+1)*2, imm.value)
+	// @todo: create UnpaddedImmediate
+	//	return fmt.Sprintf("%x", imm.value)
 }
 
 func (inst Instruction) String() string {
