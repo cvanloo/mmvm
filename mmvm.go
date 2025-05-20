@@ -2386,7 +2386,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJe,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111100:
 			i2 := text[i]; i++
@@ -2396,7 +2396,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJl,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111110:
 			i2 := text[i]; i++
@@ -2406,7 +2406,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJle,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110010:
 			i2 := text[i]; i++
@@ -2416,7 +2416,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJb,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110110:
 			i2 := text[i]; i++
@@ -2426,7 +2426,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJbe,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111010:
 			i2 := text[i]; i++
@@ -2436,7 +2436,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJp,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110000:
 			i2 := text[i]; i++
@@ -2446,7 +2446,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJo,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111000:
 			i2 := text[i]; i++
@@ -2456,7 +2456,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJs,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110101:
 			i2 := text[i]; i++
@@ -2466,7 +2466,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJne,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111101:
 			i2 := text[i]; i++
@@ -2476,7 +2476,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJnl,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111111:
 			i2 := text[i]; i++
@@ -2486,7 +2486,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJnle,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110011:
 			i2 := text[i]; i++
@@ -2496,7 +2496,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJnb,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110111:
 			i2 := text[i]; i++
@@ -2506,7 +2506,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJnbe,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111011:
 			i2 := text[i]; i++
@@ -2516,7 +2516,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJnp,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01110001:
 			i2 := text[i]; i++
@@ -2526,7 +2526,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJno,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b01111001:
 			i2 := text[i]; i++
@@ -2536,7 +2536,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJns,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b11100010:
 			i2 := text[i]; i++
@@ -2546,7 +2546,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpLoop,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b11100001:
 			i2 := text[i]; i++
@@ -2556,7 +2556,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpLoopz,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b11100000:
 			i2 := text[i]; i++
@@ -2566,7 +2566,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpLoopnz,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b11100011:
 			i2 := text[i]; i++
@@ -2576,7 +2576,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJcxz,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
