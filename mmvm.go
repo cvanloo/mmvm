@@ -715,7 +715,7 @@ func (mem Memory) AsmString() string {
 	case 0b00:
 		if mem.rm == 0b110 {
 			disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
-			return fmt.Sprintf("[%s+%x]", names[mem.rm], disp)
+			return fmt.Sprintf("[%04x]", disp)
 		}
 		return "[" + names[mem.rm] + "]"
 	case 0b01:
@@ -827,22 +827,23 @@ func decode(text []byte) (insts []Instruction, err error) {
 			mod, reg, rm := MODREGRM(i2)
 			opReg := Register{name: reg, width: w}
 			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
 				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
 				opRM = Register{name: rm, width: w}
 			}
 			inst := Instruction {
@@ -1736,6 +1737,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			case 0b000:
 				op = OpTestRmImm
 				// @fixme(test): has one or two data bytes!!!
+				_ = text[i]; i++
+				if w == 1 {
+					_ = text[i]; i++
+				}
 			case 0b010:
 				op = OpNot
 			case 0b011:
