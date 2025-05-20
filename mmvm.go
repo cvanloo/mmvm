@@ -48,6 +48,10 @@ type (
 		width byte
 		addr int16
 	}
+	// Segment:Offset
+	SegmentOffset struct {
+		segment, offset int16
+	}
 	Immediate struct {
 		width byte
 		value int16
@@ -155,6 +159,10 @@ const (
 	OpScas
 	OpLods
 	OpStos
+	OpCallDirSeg
+	OpCallIndirSeg
+	OpCallDirInterSeg
+	OpCallIndirInterSeg
 
 	OpIntType3
 	OpIntTypeSpecified
@@ -334,6 +342,14 @@ func (op Operation) Description() string {
 		return "LODS Load Byte/Word to AL/AX"
 	case OpStos:
 		return "STOS Store Byte/Word from AL/AX"
+	case OpCallDirSeg:
+		return "CALL Direct within Segment"
+	case OpCallIndirSeg:
+		return "CALL Indirect within Segment"
+	case OpCallDirInterSeg:
+		return "CALL Direct Intersegment"
+	case OpCallIndirInterSeg:
+		return "CALL Indirect Intersegment"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -451,6 +467,8 @@ func (op Operation) String() string {
 		return "lods"
 	case OpStos:
 		return "stos"
+	case OpCallDirSeg, OpCallIndirSeg, OpCallDirInterSeg, OpCallIndirInterSeg:
+		return "call"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
 	}
@@ -516,6 +534,14 @@ func (addr Address) String() string {
 
 func (addr Address) AsmString() string {
 	return fmt.Sprintf("[%04x]", addr.addr)
+}
+
+func (so SegmentOffset) String() string {
+	return so.AsmString()
+}
+
+func (so SegmentOffset) AsmString() string {
+	return fmt.Sprintf("%04x:%04x", so.segment, so.offset)
 }
 
 func (imm Immediate) String() string {
@@ -2010,6 +2036,71 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: nil,
 			})
 			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
+		case i1 == 0b11101000:
+			i2 := text[i]; i++
+			i3 := text[i]; i++
+			disp := (int16(i3) << 8) ^ int16(i2)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3},
+				operation: OpCallDirSeg,
+				operands: Operands{Immediate{width: 1, value: int16(offset + 3) - disp}},
+			})
+		case i1 == 0b11111111:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
+			mod, xxx, rm := MODREGRM(i2)
+			var op Operation
+			switch xxx {
+			default:
+				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			case 0b010:
+				op = OpCallIndirSeg
+			case 0b011:
+				op = OpCallIndirInterSeg
+			}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: 1}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4},
+				operation: op,
+				operands: Operands{opRM},
+			})
+		case i1 == 0b10011010:
+			i2 := text[i]; i++
+			i3 := text[i]; i++
+			off := (int16(i3) << 8) ^ int16(i2)
+			i4 := text[i]; i++
+			i5 := text[i]; i++
+			seg := (int16(i5) << 8) ^ int16(i4)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4,i5},
+				operation: OpCallDirInterSeg,
+				operands: Operands{SegmentOffset{segment: seg, offset: off}},
+			})
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
 				offset: offset,
