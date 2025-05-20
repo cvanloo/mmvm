@@ -9,6 +9,7 @@ import (
 	//"encoding/binary" // @todo: do the parsing properly
 )
 
+// @fixme: sign extension is only perform by doing a double cast int16(int8(byte))
 // @todo: AT&T syntax printing
 
 type (
@@ -148,6 +149,12 @@ const (
 	OpXorRegRm
 	OpXorRmImm
 	OpXorAccImm
+	OpRep
+	OpMovs
+	OpCmps
+	OpScas
+	OpLods
+	OpStos
 
 	OpIntType3
 	OpIntTypeSpecified
@@ -315,6 +322,18 @@ func (op Operation) Description() string {
 		return "XOR Immediate to Register/Memory"
 	case OpXorAccImm:
 		return "XOR Immediate to Accumulator"
+	case OpRep:
+		return "REP Repeat"
+	case OpMovs:
+		return "MOVS Move Byte/Word"
+	case OpCmps:
+		return "CMPS Compare Byte/Word"
+	case OpScas:
+		return "SCAS Scan Byte/Word"
+	case OpLods:
+		return "LODS Load Byte/Word to AL/AX"
+	case OpStos:
+		return "STOS Store Byte/Word from AL/AX"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -420,6 +439,18 @@ func (op Operation) String() string {
 		return "or"
 	case OpXorRegRm, OpXorRmImm, OpXorAccImm:
 		return "xor"
+	case OpRep:
+		return "rep"
+	case OpMovs:
+		return "movs"
+	case OpCmps:
+		return "cmps"
+	case OpScas:
+		return "scas"
+	case OpLods:
+		return "lods"
+	case OpStos:
+		return "stos"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
 	}
@@ -470,7 +501,7 @@ func (mem Memory) AsmString() string {
 		}
 		return "[" + names[mem.rm] + "]"
 	case 0b01:
-		return fmt.Sprintf("[%s+%x]", names[mem.rm], int16(mem.dispLow))
+		return fmt.Sprintf("[%s+%x]", names[mem.rm], int16(int8(mem.dispLow)))
 	case 0b10:
 		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
 		return fmt.Sprintf("[%s+%x]", names[mem.rm], disp)
@@ -1917,6 +1948,68 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Immediate{width: w, value: data},
 				},
 			})
+		case (i1 & 0b11111110) == 0b11110010:
+			z := W(i1)
+			i2 := text[i]; i++
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpRep,
+				operands: nil,
+			})
+			_ = z // @todo: the heck is z?
+			// @fixme: rep is followed by another STRING instruction as its operand
+		case (i1 & 0b11111110) == 0b10100100:
+			w := W(i1)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpMovs,
+				operands: nil,
+			})
+			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
+		case (i1 & 0b11111110) == 0b10100110:
+			w := W(i1)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpCmps,
+				operands: nil,
+			})
+			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
+		case (i1 & 0b11111110) == 0b10101110:
+			w := W(i1)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpScas,
+				operands: nil,
+			})
+			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
+		case (i1 & 0b11111110) == 0b10101100:
+			w := W(i1)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpLods,
+				operands: nil,
+			})
+			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
+		case (i1 & 0b11111110) == 0b10101010:
+			w := W(i1)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpStos,
+				operands: nil,
+			})
+			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
 				offset: offset,
