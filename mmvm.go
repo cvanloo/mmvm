@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"bytes"
 	"log"
+	"flag"
 )
 
 // @fixme: sign extension is only perform by doing a double cast int16(int8(byte))
@@ -752,7 +753,7 @@ func (imm Immediate) AsmString() string {
 }
 
 func (inst Instruction) String() string {
-	return fmt.Sprintf("%04x: %-14x %s %s", inst.offset, inst.bytes[:inst.size], inst.operation, inst.operands)
+	return fmt.Sprintf("%04x: %-13x %s %s", inst.offset, inst.bytes[:inst.size], inst.operation, inst.operands)
 }
 
 func W(i byte) byte {
@@ -2733,20 +2734,31 @@ func must[T any](t T, err error) T {
 	return t
 }
 
+var d = flag.Bool("d", false, "disassemble")
+
+func init() {
+	flag.Parse()
+}
+
 func main() {
-	bin := must(os.ReadFile("a3.out"))
+	restArgs := flag.Args()
+	if len(restArgs) <= 0 {
+		log.Fatal("no input file provided")
+	}
+	file := restArgs[0]
+	bin := must(os.ReadFile(file))
 	//exec := *(*Exec)(unsafe.Pointer(&bin[0]))
 	var exec Exec
 	if err := binary.Read(bytes.NewReader(bin), binary.LittleEndian, &exec); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("%#v\n", exec)
+	//fmt.Printf("%#v\n", exec)
 	text := bin[32:32+exec.SizeText]
-	fmt.Printf("%x\n", text)
+	//fmt.Printf("%x\n", text)
 
 	insts, err := decode(text)
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
 	}
 	for _, inst := range insts {
 		fmt.Println(inst)
