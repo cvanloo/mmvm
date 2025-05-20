@@ -163,6 +163,11 @@ const (
 	OpCallIndirSeg
 	OpCallDirInterSeg
 	OpCallIndirInterSeg
+	OpJmpDirSeg
+	OpJmpShortDirSeg
+	OpJmpIndirSeg
+	OpJmpDirInterSeg
+	OpJmpIndirInterSeg
 
 	OpIntType3
 	OpIntTypeSpecified
@@ -350,6 +355,16 @@ func (op Operation) Description() string {
 		return "CALL Direct Intersegment"
 	case OpCallIndirInterSeg:
 		return "CALL Indirect Intersegment"
+	case OpJmpDirSeg:
+		return "JMP Direct within Segment"
+	case OpJmpShortDirSeg:
+		return "JMP Direct within Segment-Short"
+	case OpJmpIndirSeg:
+		return "JMP Indirect within Segment"
+	case OpJmpDirInterSeg:
+		return "JMP Direct Intersegment"
+	case OpJmpIndirInterSeg:
+		return "JMP Indirect Intersegment"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -467,6 +482,10 @@ func (op Operation) String() string {
 		return "lods"
 	case OpStos:
 		return "stos"
+	case OpJmpDirSeg, OpJmpIndirSeg, OpJmpDirInterSeg, OpJmpIndirInterSeg:
+		return "jmp"
+	case OpJmpShortDirSeg:
+		return "jmp short"
 	case OpCallDirSeg, OpCallIndirSeg, OpCallDirInterSeg, OpCallIndirInterSeg:
 		return "call"
 	case OpIntType3, OpIntTypeSpecified:
@@ -2060,6 +2079,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 				op = OpCallIndirSeg
 			case 0b011:
 				op = OpCallIndirInterSeg
+			case 0b100:
+				op = OpJmpIndirSeg
+			case 0b101:
+				op = OpJmpIndirInterSeg
 			}
 			var opRM Operand
 			dispHigh := byte(0)
@@ -2099,6 +2122,41 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2,i3,i4,i5},
 				operation: OpCallDirInterSeg,
+				operands: Operands{SegmentOffset{segment: seg, offset: off}},
+			})
+		case i1 == 0b11101001:
+			i2 := text[i]; i++
+			i3 := text[i]; i++
+			disp := (int16(i3) << 8) ^ int16(i2)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3},
+				operation: OpJmpDirSeg,
+				operands: Operands{Immediate{width: 1, value: int16(offset + 3) - disp}},
+			})
+		case i1 == 0b11101011:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJmpShortDirSeg,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b11101010:
+			i2 := text[i]; i++
+			i3 := text[i]; i++
+			off := (int16(i3) << 8) ^ int16(i2)
+			i4 := text[i]; i++
+			i5 := text[i]; i++
+			seg := (int16(i5) << 8) ^ int16(i4)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4,i5},
+				operation: OpJmpDirInterSeg,
 				operands: Operands{SegmentOffset{segment: seg, offset: off}},
 			})
 		case i1 == 0b11001100:
