@@ -1007,40 +1007,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				inst.operands = Operands{opRM, opReg}
 			}
 			insts = append(insts, inst)
-		case i1 == 0b11111111:
-			i2 := text[i]; i++
-			i3 := byte(0)
-			i4 := byte(0)
-			mod, ooz, rm := MODREGRM(i2)
-			if ooz != 0b110 {
-				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
-			}
-			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
-				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
-				opRM = Register{name: rm, width: 1}
-			}
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,i4},
-				operation: OpPushRm,
-				operands: Operands{opRM},
-			})
 		case (i1 & 0b11111000) == 0b01010000:
 			reg := REG1(i1)
 			insts = append(insts, Instruction {
@@ -1534,6 +1500,52 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Register{name: RegA, width: w},
 					Immediate{width: w, value: data},
 				},
+			})
+		case i1 == 0b11111111:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
+			mod, xxx, rm := MODREGRM(i2)
+			var op Operation
+			switch xxx {
+			default:
+				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			case 0b010:
+				op = OpCallIndirSeg
+			case 0b011:
+				op = OpCallIndirInterSeg
+			case 0b100:
+				op = OpJmpIndirSeg
+			case 0b101:
+				op = OpJmpIndirInterSeg
+			case 0b110:
+				op = OpPushRm
+			}
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: 1}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4},
+				operation: op,
+				operands: Operands{opRM},
 			})
 		case (i1 & 0b11111110) == 0b11111110:
 			i2 := text[i]; i++
@@ -2257,50 +2269,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				bytes: [6]byte{i1,i2,i3},
 				operation: OpCallDirSeg,
 				operands: Operands{Immediate{width: 1, value: int16(offset + 3) + disp}},
-			})
-		case i1 == 0b11111111:
-			i2 := text[i]; i++
-			i3 := byte(0)
-			i4 := byte(0)
-			mod, xxx, rm := MODREGRM(i2)
-			var op Operation
-			switch xxx {
-			default:
-				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
-			case 0b010:
-				op = OpCallIndirSeg
-			case 0b011:
-				op = OpCallIndirInterSeg
-			case 0b100:
-				op = OpJmpIndirSeg
-			case 0b101:
-				op = OpJmpIndirInterSeg
-			}
-			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
-				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
-				opRM = Register{name: rm, width: 1}
-			}
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,i4},
-				operation: op,
-				operands: Operands{opRM},
 			})
 		case i1 == 0b10011010:
 			i2 := text[i]; i++
