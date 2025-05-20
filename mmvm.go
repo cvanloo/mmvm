@@ -196,6 +196,17 @@ const (
 	OpIntTypeSpecified
 	OpInto
 	OpIret
+	OpClc
+	OpCmc
+	OpStc
+	OpCld
+	OpStd
+	OpCli
+	OpSti
+	OpHlt
+	OpWait
+	OpEsc
+	OpLock
 )
 
 func (op Operation) Description() string {
@@ -446,6 +457,28 @@ func (op Operation) Description() string {
 		return "INTO Interrupt on Overflow"
 	case OpIret:
 		return "IRET Interrupt Return"
+	case OpClc:
+		return "CLC Clear Carry"
+	case OpCmc:
+		return "CMC Complement Carry"
+	case OpStc:
+		return "STC Set Carry"
+	case OpCld:
+		return "CLD Clear Direction"
+	case OpStd:
+		return "STD Set Direction"
+	case OpCli:
+		return "CLI Clear Interrupt"
+	case OpSti:
+		return "STI Set Interrupt"
+	case OpHlt:
+		return "HLT Halt"
+	case OpWait:
+		return "WAIT Wait"
+	case OpEsc:
+		return "ESC Escape (to External Device)"
+	case OpLock:
+		return "LOCK Bus Lock Prefix"
 	}
 }
 
@@ -613,6 +646,28 @@ func (op Operation) String() string {
 		return "into"
 	case OpIret:
 		return "iret"
+	case OpClc:
+		return "clc"
+	case OpCmc:
+		return "cmc"
+	case OpStc:
+		return "stc"
+	case OpCld:
+		return "cld"
+	case OpStd:
+		return "std"
+	case OpCli:
+		return "cli"
+	case OpSti:
+		return "sti"
+	case OpHlt:
+		return "hlt"
+	case OpWait:
+		return "wait"
+	case OpEsc:
+		return "esc"
+	case OpLock:
+		return "lock"
 	}
 }
 
@@ -2552,6 +2607,117 @@ func decode(text []byte) (insts []Instruction, err error) {
 				bytes: [6]byte{i1},
 				operation: OpIret,
 				operands: nil,
+			})
+		case i1 == 0b11111000:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpClc,
+				operands: nil,
+			})
+		case i1 == 0b11110101:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpCmc,
+				operands: nil,
+			})
+		case i1 == 0b11111001:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpStc,
+				operands: nil,
+			})
+		case i1 == 0b11111100:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpCld,
+				operands: nil,
+			})
+		case i1 == 0b11111101:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpStd,
+				operands: nil,
+			})
+		case i1 == 0b11111010:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpCli,
+				operands: nil,
+			})
+		case i1 == 0b11111011:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpSti,
+				operands: nil,
+			})
+		case i1 == 0b11110100:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpHlt,
+				operands: nil,
+			})
+		case i1 == 0b10011011:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpWait,
+				operands: nil,
+			})
+		case i1 == 0b11110000:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpLock,
+				operands: nil,
+			})
+		case (i1 & 0b11111000) == 0b11011000:
+			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
+			mod, _, rm := MODREGRM(i2)
+			var opRM Operand
+			dispHigh := byte(0)
+			dispLow := byte(0)
+			switch {
+			case mod == 0b00 && rm == 0b110:
+				fallthrough
+			case mod == 0b10:
+				i4 = text[i]; i++
+				dispHigh = i4
+				fallthrough
+			case mod == 0b01:
+				i3 = text[i]; i++
+				dispLow = i3
+				fallthrough
+			case mod == 0b00:
+				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
+			case mod == 0b11:
+				opRM = Register{name: rm, width: 1}
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4},
+				operation: OpEsc,
+				operands: Operands{opRM},
 			})
 		}
 	}
