@@ -716,7 +716,7 @@ func (mem Memory) AsmString() string {
 		}
 		return "[" + names[mem.rm] + "]"
 	case 0b01:
-		return fmt.Sprintf("[%s+%x]", names[mem.rm], int16(int8(mem.dispLow)))
+		return fmt.Sprintf("[%s%+x]", names[mem.rm], int16(int8(mem.dispLow)))
 	case 0b10:
 		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
 		return fmt.Sprintf("[%s+%x]", names[mem.rm], disp)
