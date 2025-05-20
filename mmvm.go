@@ -1509,7 +1509,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 					Immediate{width: w, value: data},
 				},
 			})
-		case i1 == 0b11111111:
+		case (i1 & 0b11111110) == 0b11111110:
 			i2 := text[i]; i++
 			i3 := byte(0)
 			i4 := byte(0)
@@ -1518,6 +1518,10 @@ func decode(text []byte) (insts []Instruction, err error) {
 			switch xxx {
 			default:
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			case 0b000:
+				op = OpIncRm
+			case 0b001:
+				op = OpDecRm
 			case 0b010:
 				op = OpCallIndirSeg
 			case 0b011:
@@ -1528,46 +1532,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				op = OpJmpIndirInterSeg
 			case 0b110:
 				op = OpPushRm
-			}
-			var opRM Operand
-			dispHigh := byte(0)
-			dispLow := byte(0)
-			switch {
-			case mod == 0b00 && rm == 0b110:
-				fallthrough
-			case mod == 0b10:
-				i4 = text[i]; i++
-				dispHigh = i4
-				fallthrough
-			case mod == 0b01:
-				i3 = text[i]; i++
-				dispLow = i3
-				fallthrough
-			case mod == 0b00:
-				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
-			case mod == 0b11:
-				opRM = Register{name: rm, width: 1}
-			}
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2,i3,i4},
-				operation: op,
-				operands: Operands{opRM},
-			})
-		case (i1 & 0b11111110) == 0b11111110:
-			i2 := text[i]; i++
-			i3 := byte(0)
-			i4 := byte(0)
-			mod, zzx, rm := MODREGRM(i2)
-			var op Operation
-			switch zzx {
-			default:
-				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
-			case 0b000:
-				op = OpIncRm
-			case 0b001:
-				op = OpDecRm
 			}
 			w := W(i1)
 			var opRM Operand
@@ -1587,6 +1551,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 			case mod == 0b00:
 				opRM = Memory{mod: mod, rm: rm, dispHigh: dispHigh, dispLow: dispLow}
 			case mod == 0b11:
+				// @todo: validate that in all cases except for IncRm and DecRm w is always 1
 				opRM = Register{name: rm, width: w}
 			}
 			insts = append(insts, Instruction {
