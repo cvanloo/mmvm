@@ -168,6 +168,10 @@ const (
 	OpJmpIndirSeg
 	OpJmpDirInterSeg
 	OpJmpIndirInterSeg
+	OpRetSeg
+	OpRetSegImm
+	OpRetInterSeg
+	OpRetInterSegImm
 
 	OpIntType3
 	OpIntTypeSpecified
@@ -365,6 +369,14 @@ func (op Operation) Description() string {
 		return "JMP Direct Intersegment"
 	case OpJmpIndirInterSeg:
 		return "JMP Indirect Intersegment"
+	case OpRetSeg:
+		return "RET Within Segment"
+	case OpRetSegImm:
+		return "RET Within Segment Adding Immediate to SP"
+	case OpRetInterSeg:
+		return "RET Intersegment"
+	case OpRetInterSegImm:
+		return "RET Intersegment Adding Immediate to SP"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -488,6 +500,8 @@ func (op Operation) String() string {
 		return "jmp short"
 	case OpCallDirSeg, OpCallIndirSeg, OpCallDirInterSeg, OpCallIndirInterSeg:
 		return "call"
+	case OpRetSeg, OpRetSegImm, OpRetInterSeg, OpRetInterSegImm:
+		return "ret"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
 	}
@@ -2158,6 +2172,44 @@ func decode(text []byte) (insts []Instruction, err error) {
 				bytes: [6]byte{i1,i2,i3,i4,i5},
 				operation: OpJmpDirInterSeg,
 				operands: Operands{SegmentOffset{segment: seg, offset: off}},
+			})
+		case i1 == 0b11000011:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpRetSeg,
+				operands: nil,
+			})
+		case i1 == 0b11000010:
+			i2 := text[i]; i++
+			i3 := text[i]; i++
+			data := (int16(i3) << 8) ^ int16(i2)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3},
+				operation: OpRetSegImm,
+				operands: Operands{Immediate{width: 1, value: data}},
+			})
+		case i1 == 0b11001011:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpRetInterSeg,
+				operands: nil,
+			})
+		case i1 == 0b11001010:
+			i2 := text[i]; i++
+			i3 := text[i]; i++
+			data := (int16(i3) << 8) ^ int16(i2)
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3},
+				operation: OpRetInterSegImm,
+				operands: Operands{Immediate{width: 1, value: data}},
 			})
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
