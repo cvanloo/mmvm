@@ -2250,7 +2250,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2,i3},
 				operation: OpCallDirSeg,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 3) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 3) + disp}},
 			})
 		case i1 == 0b11111111:
 			i2 := text[i]; i++
@@ -2319,7 +2319,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2,i3},
 				operation: OpJmpDirSeg,
-				operands: Operands{Immediate{width: 1, value: int16(offset + 3) - disp}},
+				operands: Operands{Immediate{width: 1, value: int16(offset + 3) + disp}},
 			})
 		case i1 == 0b11101011:
 			i2 := text[i]; i++
@@ -2329,7 +2329,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				size: i - offset,
 				bytes: [6]byte{i1,i2},
 				operation: OpJmpShortDirSeg,
-				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) + disp}},
 			})
 		case i1 == 0b11101010:
 			i2 := text[i]; i++
