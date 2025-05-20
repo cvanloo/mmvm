@@ -192,9 +192,10 @@ const (
 	OpLoopz
 	OpLoopnz
 	OpJcxz
-
 	OpIntType3
 	OpIntTypeSpecified
+	OpInto
+	OpIret
 )
 
 func (op Operation) Description() string {
@@ -441,6 +442,10 @@ func (op Operation) Description() string {
 		return "INT Type 3"
 	case OpIntTypeSpecified:
 		return "INT Type Specified"
+	case OpInto:
+		return "INTO Interrupt on Overflow"
+	case OpIret:
+		return "IRET Interrupt Return"
 	}
 }
 
@@ -604,6 +609,10 @@ func (op Operation) String() string {
 		return "jcxz"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
+	case OpInto:
+		return "into"
+	case OpIret:
+		return "iret"
 	}
 }
 
@@ -2527,6 +2536,22 @@ func decode(text []byte) (insts []Instruction, err error) {
 				bytes: [6]byte{i1,i2},
 				operation: OpIntTypeSpecified,
 				operands: Operands{Immediate{width: 0, value: int16(i2)}},
+			})
+		case i1 == 0b11001110:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpInto,
+				operands: nil,
+			})
+		case i1 == 0b11001111:
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1},
+				operation: OpIret,
+				operands: nil,
 			})
 		}
 	}
