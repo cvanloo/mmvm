@@ -172,6 +172,26 @@ const (
 	OpRetSegImm
 	OpRetInterSeg
 	OpRetInterSegImm
+	OpJe
+	OpJl
+	OpJle
+	OpJb
+	OpJbe
+	OpJp
+	OpJo
+	OpJs
+	OpJne
+	OpJnl
+	OpJnle
+	OpJnb
+	OpJnbe
+	OpJnp
+	OpJno
+	OpJns
+	OpLoop
+	OpLoopz
+	OpLoopnz
+	OpJcxz
 
 	OpIntType3
 	OpIntTypeSpecified
@@ -377,6 +397,46 @@ func (op Operation) Description() string {
 		return "RET Intersegment"
 	case OpRetInterSegImm:
 		return "RET Intersegment Adding Immediate to SP"
+	case OpJe:
+		return "JE/JZ Jump on Equal/Zero"
+	case OpJl:
+		return "JL/JNGE Jump on Less/Not Greater or Equal"
+	case OpJle:
+		return "JLE/JNG Jump on Less or Equal/Not Greater"
+	case OpJb:
+		return "JB/JNAE Jump on Below/Not Above or Equal"
+	case OpJbe:
+		return "JBE/JNA Jump on Below or Equal/Not Above"
+	case OpJp:
+		return "JP/JPE Jump on Parity/Parity Even"
+	case OpJo:
+		return "JO Jump on Overflow"
+	case OpJs:
+		return "JS Jump on Sign"
+	case OpJne:
+		return "JNE/JNZ Jump on Not Equal/Not Zero"
+	case OpJnl:
+		return "JNL/JGE Jump on Not Less/Greater or Equal"
+	case OpJnle:
+		return "JNLE/JG Jump on Not Less or Equal/Greater"
+	case OpJnb:
+		return "JNB/JAE Jump on Not Below/Above or Equal"
+	case OpJnbe:
+		return "JNBE/JA Jump on Not Below or Equal/Above"
+	case OpJnp:
+		return "JNP/JPO Jump on Not Parity/Parity Odd"
+	case OpJno:
+		return "JNO Jump on Not Overflow"
+	case OpJns:
+		return "JNS Jump on Not Sign"
+	case OpLoop:
+		return "LOOP Loop CX Times"
+	case OpLoopz:
+		return "LOOPZ/LOOPE Loop While Zero/Equal"
+	case OpLoopnz:
+		return "LOOPNZ/LOOPNE Loop While Not Zero/Equal"
+	case OpJcxz:
+		return "JCXZ Jump on CX Zero"
 	case OpIntType3:
 		return "INT Type 3"
 	case OpIntTypeSpecified:
@@ -502,6 +562,46 @@ func (op Operation) String() string {
 		return "call"
 	case OpRetSeg, OpRetSegImm, OpRetInterSeg, OpRetInterSegImm:
 		return "ret"
+	case OpJe:
+		return "je"
+	case OpJl:
+		return "jl"
+	case OpJle:
+		return "jle"
+	case OpJb:
+		return "jb"
+	case OpJbe:
+		return "jbe"
+	case OpJp:
+		return "jp"
+	case OpJo:
+		return "jo"
+	case OpJs:
+		return "js"
+	case OpJne:
+		return "jne"
+	case OpJnl:
+		return "jnl"
+	case OpJnle:
+		return "jnle"
+	case OpJnb:
+		return "jnb"
+	case OpJnbe:
+		return "jnbe"
+	case OpJnp:
+		return "jnp"
+	case OpJno:
+		return "jno"
+	case OpJns:
+		return "jns"
+	case OpLoop:
+		return "loop"
+	case OpLoopz:
+		return "loopz"
+	case OpLoopnz:
+		return "loopnz"
+	case OpJcxz:
+		return "jcxz"
 	case OpIntType3, OpIntTypeSpecified:
 		return "int"
 	}
@@ -2210,6 +2310,206 @@ func decode(text []byte) (insts []Instruction, err error) {
 				bytes: [6]byte{i1,i2,i3},
 				operation: OpRetInterSegImm,
 				operands: Operands{Immediate{width: 1, value: data}},
+			})
+		case i1 == 0b01110100:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJe,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01111100:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJl,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01111110:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJle,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01110010:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJb,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01110110:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJbe,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01111010:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJp,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01110000:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJo,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01111000:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJs,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01110101:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJne,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01111101:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJnl,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01111111:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJnle,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01110011:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJnb,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01110111:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJnbe,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01111011:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJnp,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01110001:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJno,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b01111001:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJns,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b11100010:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpLoop,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b11100001:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpLoopz,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b11100000:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpLoopnz,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
+			})
+		case i1 == 0b11100011:
+			i2 := text[i]; i++
+			disp := int16(int8(i2))
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2},
+				operation: OpJcxz,
+				operands: Operands{Immediate{width: 0, value: int16(offset + 2) - disp}},
 			})
 		case i1 == 0b11001100:
 			insts = append(insts, Instruction {
