@@ -59,9 +59,6 @@ type (
 		width byte
 		value uint16
 	}
-	ImmediateNumber struct {
-		value int16
-	}
 )
 
 const (
@@ -758,17 +755,26 @@ func (imm Immediate) AsmString() string {
 	//	return fmt.Sprintf("%x", imm.value)
 }
 
-func (imm ImmediateNumber) String() string {
-	return imm.AsmString()
-}
-
-func (imm ImmediateNumber) AsmString() string {
-	return fmt.Sprintf("%x", imm.value)
-}
-
 func (inst Instruction) String() string {
+	sizeSpecifier := func() string {
+		if len(inst.operands) >= 2 {
+			switch inst.operands[0].(type) {
+			case Memory:
+				switch imm := inst.operands[1].(type) {
+				case Immediate:
+					switch imm.width {
+					case 0:
+						return " byte"
+					case 1:
+						//return " word"
+					}
+				}
+			}
+		}
+		return ""
+	}
 	if len(inst.operands) > 0 {
-		return fmt.Sprintf("%04x: %-13x %s %s", inst.offset, inst.bytes[:inst.size], inst.operation, inst.operands)
+		return fmt.Sprintf("%04x: %-13x %s%s %s", inst.offset, inst.bytes[:inst.size], inst.operation, sizeSpecifier(), inst.operands)
 	} else {
 		return fmt.Sprintf("%04x: %-13x %s", inst.offset, inst.bytes[:inst.size], inst.operation)
 	}
@@ -1450,8 +1456,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operation: op,
 				operands: Operands{
 					opRM,
-					// @fixme: depends on if RM is R or M
-					ImmediateNumber{value: data},
+					Immediate{width: w, value: uint16(data)},
 				},
 			})
 		case (i1 & 0b11111110) == 0b00000100:
@@ -1470,7 +1475,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operation: OpAddAccImm,
 				operands: Operands{
 					Register{name: RegA, width: w},
-					ImmediateNumber{value: data},
+					Immediate{width: w, value: uint16(data)},
 				},
 			})
 		case (i1 & 0b11111100) == 0b00010000:
@@ -1787,7 +1792,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 					bs = append(bs, data2)
 					data = (int16(data2) << 8) ^ data
 				}
-				operands = Operands{opRM, ImmediateNumber{value: data}}
+				operands = Operands{opRM, Immediate{width: w, value: uint16(data)}}
 			case 0b010:
 				op = OpNot
 			case 0b011:
@@ -1979,7 +1984,8 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: nil,
 			}
 			if v == 0 { // count is 1
-				inst.operands = Operands{opRM, ImmediateNumber{value: 1}}
+				// @fixme: w correct here?
+				inst.operands = Operands{opRM, Immediate{width: w, value: 1}}
 			} else { // count is in CL
 				inst.operands = Operands{opRM, Register{name: RegC, width: 0}}
 			}
