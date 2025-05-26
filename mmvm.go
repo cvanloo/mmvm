@@ -1147,7 +1147,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				},
 			})
 		case (i1 & 0b11111110) == 0b11100100:
-			//w := W(i1)
+			w := W(i1)
 			i2 := text[i]; i++
 			port := uint16(i2)
 			insts = append(insts, Instruction {
@@ -1156,17 +1156,21 @@ func decode(text []byte) (insts []Instruction, err error) {
 				bytes: [6]byte{i1,i2},
 				operation: OpInFixedPort,
 				operands: Operands{
-					Immediate{width: 0, value: port},
+					Register{width: w, name: RegA},
+					Immediate{width: w, value: port},
 				},
 			})
 		case (i1 & 0b11111110) == 0b11101100:
-			//w := W(i1)
+			w := W(i1)
 			insts = append(insts, Instruction {
 				offset: offset,
 				size: i - offset,
 				bytes: [6]byte{i1},
 				operation: OpInVarPort,
-				operands: nil,
+				operands: Operands{
+					Register{width: w, name: RegA},
+					Register{width: w, name: RegD},
+				},
 			})
 		case (i1 & 0b11111110) == 0b11100110:
 			//w := W(i1)
