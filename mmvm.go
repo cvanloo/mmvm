@@ -836,142 +836,6 @@ func SEG(i byte) byte {
 	return (i >> 3) & 0b11
 }
 
-type Decoder struct {
-	text []byte
-	consumed, top int
-	insts []Instruction
-}
-
-func (d *Decoder) Consume() (offset, size int, bytes [6]byte) {
-	for i, b := range d.text[d.consumed:d.top] {
-		bytes[i] = b
-	}
-	offset = d.consumed
-	size = d.top - d.consumed
-	d.consumed = d.top
-	return offset, size, bytes
-}
-
-func (d *Decoder) Advance() (b byte) {
-	b = d.text[d.top]
-	d.top += 1
-	return b
-}
-
-func (d *Decoder) Peek() (b byte) {
-	return d.text[d.top]
-}
-
-var ErrInvalidBitPattern = errors.New("invalid bit pattern")
-
-func (d *Decoder) decodeOpModRegRm() (err error) {
-	i1 := d.Advance()
-	rd, w := DW(i1)
-	i2 := d.Advance()
-	mod, reg, rm := MODREGRM(i2)
-	opReg := Register{name: reg, width: w}
-	var opRM Operand
-	switch mod {
-	case 0b00:
-		if rm == 0b110 {
-			i3 := d.Advance()
-			i4 := d.Advance()
-			opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
-		} else {
-			opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
-		}
-	case 0b10:
-		i3 := d.Advance()
-		i4 := d.Advance()
-		opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
-	case 0b01:
-		i3 := d.Advance()
-		opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
-	case 0b11:
-		opRM = Register{name: rm, width: w}
-	}
-	offset, size, bytes := d.Consume()
-	inst := Instruction {
-		offset: offset,
-		size: size,
-		bytes: bytes,
-		operation: OpMovRegRm,
-		operands: nil,
-	}
-	if rd == 0 { // from reg
-		inst.operands = Operands{opRM, opReg}
-	} else { // to reg
-		inst.operands = Operands{opReg, opRM}
-	}
-	d.insts = append(d.insts, inst)
-	return
-}
-
-func (d *Decoder) decodeOpModXxxRm(xxxMap map[byte]Operation, hasS bool) (err error) {
-	i1 := d.Advance()
-	s, w := SW(i1)
-	i2 := d.Advance()
-	mod, xxx, rm := MODREGRM(i2)
-	op, found := xxxMap[xxx]
-	if !found {
-		err = ErrInvalidBitPattern
-	}
-	//	op = OpAndRmImm
-	//	op = OpOrRmImm
-	//	op = OpXorRmImm
-	//	sMustBeZero = true
-	var opRM Operand
-	switch mod {
-	case 0b00:
-		if rm == 0b110 {
-			i3 := d.Advance()
-			i4 := d.Advance()
-			opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
-		} else {
-			opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
-		}
-	case 0b10:
-		i3 := d.Advance()
-		i4 := d.Advance()
-		opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
-	case 0b01:
-		i3 := d.Advance()
-		opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
-	case 0b11:
-		opRM = Register{name: rm, width: w}
-	}
-	data1 := d.Advance()
-	data := int16(data1)
-	//if sMustBeZero && s != 0 {
-	//	err = ErrInvalidBitPattern
-	//}
-	if hasS {
-		if s == 1 {
-			data = int16(int8(data1))
-		} else if s == 0 && w == 1 {
-			data2 := d.Advance()
-			data = (int16(data2) << 8) ^ data
-		}
-	} else {
-		if w == 1 {
-			data2 := d.Advance()
-			data = (int16(data2) << 8) ^ data
-		}
-	}
-	offset, size, bytes := d.Consume()
-	d.insts = append(d.insts, Instruction {
-		offset: offset,
-		size: size,
-		bytes: bytes,
-		operation: op,
-		operands: Operands{
-			opRM,
-			Immediate{width: w, value: uint16(data)},
-		},
-	})
-	return
-}
-
 func decode(text []byte) (insts []Instruction, err error) {
 	for i := 0; i < len(text); {
 		offset := i
@@ -980,25 +844,101 @@ func decode(text []byte) (insts []Instruction, err error) {
 		default:
 			err = errors.Join(err, fmt.Errorf("unrecognized instruction: %x", i1))
 		case (i1 & 0b11111100) == 0b10001000:
-			var d Decoder
-			d.text = text
-			d.consumed = offset
-			d.top = i - 1
-			d.insts = insts
-			err = errors.Join(err, d.decodeOpModRegRm())
-			insts = d.insts
-			i = d.top
+			i2 := text[i]; i++
+			i3 := byte(0)
+			i4 := byte(0)
+			d, w := DW(i1)
+			mod, reg, rm := MODREGRM(i2)
+			opReg := Register{name: reg, width: w}
+			var opRM Operand
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 = text[i]; i++
+					i4 = text[i]; i++
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
+				i3 = text[i]; i++
+				i4 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 = text[i]; i++
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
+				opRM = Register{name: rm, width: w}
+			}
+			inst := Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte{i1,i2,i3,i4},
+				operation: OpMovRegRm,
+				operands: nil,
+			}
+			if d == 0 { // from reg
+				inst.operands = Operands{opRM, opReg}
+			} else { // to reg
+				inst.operands = Operands{opReg, opRM}
+			}
+			insts = append(insts, inst)
 		case (i1 & 0b11111110) == 0b11000110:
-			var d Decoder
-			d.text = text
-			d.consumed = offset
-			d.top = i - 1
-			d.insts = insts
-			err = errors.Join(err, d.decodeOpModXxxRm(map[byte]Operation{
-				0b000: OpMovRmImm,
-			}, false))
-			insts = d.insts
-			i = d.top
+			i2 := text[i]; i++
+			bs := make([]byte, 0, 6)
+			bs = append(bs, i1, i2)
+			w := W(i1)
+			mod, zzz, rm := MODREGRM(i2)
+			if zzz != 0 {
+				err = errors.Join(err, fmt.Errorf("unexpected bit pattern"))
+			}
+			var opRM Operand
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 := text[i]; i++
+					bs = append(bs, i3)
+					i4 := text[i]; i++
+					bs = append(bs, i4)
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
+				i3 := text[i]; i++
+				bs = append(bs, i3)
+				i4 := text[i]; i++
+				bs = append(bs, i4)
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 := text[i]; i++
+				bs = append(bs, i3)
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
+				opRM = Register{name: rm, width: w}
+			}
+			data1 := text[i]; i++
+			bs = append(bs, data1)
+			data := uint16(data1)
+			if w == 1 {
+				data2 := text[i]; i++
+				bs = append(bs, data2)
+				data = (uint16(data2) << 8) ^ data
+			}
+			// @fixme: brother eewww [:slice-to-array:]
+			for len(bs) < 6 {
+				bs = append(bs, 0)
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte(bs),
+				operation: OpMovRmImm,
+				operands: Operands{
+					opRM,
+					Immediate{width: w, value: data},
+				},
+			})
 		case (i1 & 0b11110000) == 0b10110000:
 			i2 := text[i]; i++
 			i3 := byte(0)
@@ -1440,23 +1380,89 @@ func decode(text []byte) (insts []Instruction, err error) {
 			}
 			insts = append(insts, inst)
 		case (i1 & 0b11111100) == 0b10000000:
-			var d Decoder
-			d.text = text
-			d.consumed = offset
-			d.top = i - 1
-			d.insts = insts
-			err = errors.Join(err, d.decodeOpModXxxRm(map[byte]Operation{
-				0b000: OpAddRmImm,
-				0b001: OpOrRmImm,
-				0b010: OpAdcRmImm,
-				0b011: OpSsbRmImm,
-				0b100: OpAndRmImm,
-				0b101: OpSubRmImm,
-				0b110: OpXorRmImm,
-				0b111: OpCmpRmImm,
-			}, true))
-			insts = d.insts
-			i = d.top
+			i2 := text[i]; i++
+			bs := make([]byte, 0, 6)
+			bs = append(bs, i1, i2)
+			s, w := SW(i1)
+			mod, zxz, rm := MODREGRM(i2)
+			var (
+				op Operation
+				sMustBeZero bool
+			)
+			switch zxz {
+			default:
+				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			case 0b000:
+				op = OpAddRmImm
+			case 0b010:
+				op = OpAdcRmImm
+			case 0b101:
+				op = OpSubRmImm
+			case 0b011:
+				op = OpSsbRmImm
+			case 0b111:
+				op = OpCmpRmImm
+			case 0b100:
+				op = OpAndRmImm
+				sMustBeZero = true
+			case 0b001:
+				op = OpOrRmImm
+				sMustBeZero = true
+			case 0b110:
+				op = OpXorRmImm
+				sMustBeZero = true
+			}
+			var opRM Operand
+			switch mod {
+			case 0b00:
+				if rm == 0b110 {
+					i3 := text[i]; i++
+					bs = append(bs, i3)
+					i4 := text[i]; i++
+					bs = append(bs, i4)
+					opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+				} else {
+					opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: 0}
+				}
+			case 0b10:
+				i3 := text[i]; i++
+				bs = append(bs, i3)
+				i4 := text[i]; i++
+				bs = append(bs, i4)
+				opRM = Memory{mod: mod, rm: rm, dispHigh: i4, dispLow: i3}
+			case 0b01:
+				i3 := text[i]; i++
+				bs = append(bs, i3)
+				opRM = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: i3}
+			case 0b11:
+				opRM = Register{name: rm, width: w}
+			}
+			data1 := text[i]; i++
+			bs = append(bs, data1)
+			// @fixme: s == 0 then don't sign extend [:sign-extend-s:]
+			data := int16(data1)
+			if sMustBeZero && s != 0 {
+				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
+			}
+			if s == 0 && w == 1 {
+				data2 := text[i]; i++
+				bs = append(bs, data2)
+				data = (int16(data2) << 8) ^ data
+			}
+			// @fixme: brother eewww [:slice-to-array:]
+			for len(bs) < 6 {
+				bs = append(bs, 0)
+			}
+			insts = append(insts, Instruction {
+				offset: offset,
+				size: i - offset,
+				bytes: [6]byte(bs),
+				operation: op,
+				operands: Operands{
+					opRM,
+					Immediate{width: w, value: uint16(data)},
+				},
+			})
 		case (i1 & 0b11111110) == 0b00000100:
 			i2 := text[i]; i++
 			i3 := byte(0)
