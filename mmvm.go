@@ -1169,7 +1169,7 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operation: OpInVarPort,
 				operands: Operands{
 					Register{width: w, name: RegA},
-					Register{width: w, name: RegD},
+					Register{width: 0b1, name: RegD},
 				},
 			})
 		case (i1 & 0b11111110) == 0b11100110:
