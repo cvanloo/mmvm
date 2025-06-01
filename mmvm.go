@@ -1439,12 +1439,13 @@ func decode(text []byte) (insts []Instruction, err error) {
 			}
 			data1 := text[i]; i++
 			bs = append(bs, data1)
-			// @fixme: s == 0 then don't sign extend [:sign-extend-s:]
 			data := int16(data1)
 			if sMustBeZero && s != 0 {
 				err = errors.Join(err, fmt.Errorf("invalid bit pattern"))
 			}
-			if s == 0 && w == 1 {
+			if s == 1 {
+				data = int16(int8(data1))
+			} else if s == 0 && w == 1 {
 				data2 := text[i]; i++
 				bs = append(bs, data2)
 				data = (int16(data2) << 8) ^ data
