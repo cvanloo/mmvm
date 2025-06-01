@@ -8,7 +8,7 @@ then
     exit 1
 fi
 
-go build mmvm.go
+go build mmvm.go || exit 1
 ./mmvm -d "$A" > mine.disas
 mmvm -d "$A" > other.disas 2>&1
 diff mine.disas other.disas
