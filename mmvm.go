@@ -887,6 +887,16 @@ func decodeDispositionShort(src *Source) Immediate {
 	return Immediate{width: 1, value: dispTotal}
 }
 
+func decodeAddress(src *Source, width byte) Address {
+	// @fixme: instruction formatting????
+	//        mov byte opn1, opn2
+	//        mov word opn1, opn2
+	b1 := src.Next()
+	b2 := src.Next()
+	addr := (int16(b2) << 8) ^ int16(b1)
+	return Address{width: width, addr: addr}
+}
+
 func decodeDirectIntersegment(src *Source) SegmentOffset {
 	o1 := src.Next()
 	o2 := src.Next()
@@ -936,15 +946,24 @@ func decode(src *Source) (inst Instruction, err error) {
 	switch i1 := src.Next(); {
 	default:
 		err = fmt.Errorf("unrecognized opcode: %02x", i1)
-	case i1 == 0b11111101:
-	case i1 == 0b11111100:
-	case i1 == 0b11111011:
-	case i1 == 0b11111010:
-	case i1 == 0b11111001:
-	case i1 == 0b11111000:
-	case i1 == 0b11110101:
-	case i1 == 0b11110100:
-	case i1 == 0b11110000:
+	case i1 == 0b11111101: // std
+		op = OpStd
+	case i1 == 0b11111100: // cld
+		op = OpCld
+	case i1 == 0b11111011: // sti
+		op = OpSti
+	case i1 == 0b11111010: // cli
+		op = OpCli
+	case i1 == 0b11111001: // stc
+		op = OpStc
+	case i1 == 0b11111000: // clc
+		op = OpClc
+	case i1 == 0b11110101: // cmc
+		op = OpCmc
+	case i1 == 0b11110100: // hlt
+		op = OpHlt
+	case i1 == 0b11110000: // lock
+		op = OpLock
 	case i1 == 0b11101011: // jmp short ???
 		disp := decodeDispositionShort(src)
 		op = OpJmpShortDirSeg
@@ -961,10 +980,22 @@ func decode(src *Source) (inst Instruction, err error) {
 		disp := decodeDisposition(src)
 		op = OpCallDirSeg
 		opn = Operands{disp}
-	case i1 == 0b11100011:
-	case i1 == 0b11100010:
-	case i1 == 0b11100001:
-	case i1 == 0b11100000:
+	case i1 == 0b11100011: // jcxz ???
+		disp := decodeDispositionShort(src)
+		op = OpJcxz
+		opn = Operands{disp}
+	case i1 == 0b11100010: // loop ???
+		disp := decodeDispositionShort(src)
+		op = OpLoop
+		opn = Operands{disp}
+	case i1 == 0b11100001: // loopz ???
+		disp := decodeDispositionShort(src)
+		op = OpLoopz
+		opn = Operands{disp}
+	case i1 == 0b11100000: // loopnz ???
+		disp := decodeDispositionShort(src)
+		op = OpLoopnz
+		opn = Operands{disp}
 	case i1 == 0b11010111: // xlat
 		op = OpXLAT
 	case i1 == 0b11010101: // aad
@@ -979,11 +1010,17 @@ func decode(src *Source) (inst Instruction, err error) {
 			err = ErrDecode
 		}
 		op = OpAAM
-	case i1 == 0b11001111:
-	case i1 == 0b11001110:
-	case i1 == 0b11001101:
-	case i1 == 0b11001100:
-	case i1 == 0b11001011:
+	case i1 == 0b11001111: // iret
+		op = OpIret
+	case i1 == 0b11001110: // into
+		op = OpInto
+	case i1 == 0b11001101: // int type
+		op = OpIntTypeSpecified
+		opn = Operands{Immediate{width: 0, value: uint16(src.Next())}}
+	case i1 == 0b11001100: // int 3
+		op = OpIntType3
+	case i1 == 0b11001011: // ret ???
+		op = OpRetInterSeg
 	case i1 == 0b11001010: // ret @fixme: ???
 		data := decodeDisposition(src)
 		op = OpRetInterSegImm
@@ -996,66 +1033,112 @@ func decode(src *Source) (inst Instruction, err error) {
 		reg, rm := decodeModRegRm(src, 1)
 		op = OpLES
 		opn = Operands{reg, rm}
-	case i1 == 0b11000011:
+	case i1 == 0b11000011: // ret ???
+		op = OpRetSeg
 	case i1 == 0b11000010: // ret @fixme: ???
 		data := decodeDisposition(src)
 		op = OpRetSegImm
 		opn = Operands{data}
-	case i1 == 0b10100010:
-	case i1 == 0b10011111:
-	case i1 == 0b10011110:
-	case i1 == 0b10011101:
-	case i1 == 0b10011100:
-	case i1 == 0b10011011:
+	case i1 == 0b10100010: // mov mem, ax // mov mem, al
+		w := W(i1)
+		addr := decodeAddress(src, w)
+		op = OpMovMemAcc
+		opn = Operands{addr, Register{name: RegA, width: w}}
+	case i1 == 0b10011111: // lahf
+		op = OpLAHF
+	case i1 == 0b10011110: // sahf
+		op = OpSAHF
+	case i1 == 0b10011101: // popf
+		op = OpPOPF
+	case i1 == 0b10011100: // pushf
+		op = OpPUSHF
+	case i1 == 0b10011011: // wait
+		op = OpWait
 	case i1 == 0b10011010: // call segment:offset
 		so := decodeDirectIntersegment(src)
 		op = OpCallDirInterSeg
 		opn = Operands{so}
-	case i1 == 0b10011001:
-	case i1 == 0b10011000:
+	case i1 == 0b10011001: // cwd
+		op = OpCWD
+	case i1 == 0b10011000: // cbw
+		op = OpCBW
 	case i1 == 0b10001111:
 	case i1 == 0b10001101: // lea reg, rm
 		reg, rm := decodeModRegRm(src, 1)
 		op = OpLEA
 		opn = Operands{reg, rm}
-	case i1 == 0b01111111:
+	case i1 == 0b01111111: // jnle ???
+		disp := decodeDispositionShort(src)
+		op = OpJnle
+		opn = Operands{disp}
 	case i1 == 0b01111110: // jle ???
 		disp := decodeDispositionShort(src)
 		op = OpJle
 		opn = Operands{disp}
-	case i1 == 0b01111101:
+	case i1 == 0b01111101: // jnl ???
+		disp := decodeDispositionShort(src)
+		op = OpJnl
+		opn = Operands{disp}
 	case i1 == 0b01111100: // jl ???
 		disp := decodeDispositionShort(src)
 		op = OpJl
 		opn = Operands{disp}
-	case i1 == 0b01111011:
+	case i1 == 0b01111011: // jnp ???
+		disp := decodeDispositionShort(src)
+		op = OpJnp
+		opn = Operands{disp}
 	case i1 == 0b01111010: // jp ???
 		disp := decodeDispositionShort(src)
 		op = OpJp
 		opn = Operands{disp}
-	case i1 == 0b01111001:
-	case i1 == 0b01111000:
-	case i1 == 0b01110111:
+	case i1 == 0b01111001: // jns ???
+		disp := decodeDispositionShort(src)
+		op = OpJns
+		opn = Operands{disp}
+	case i1 == 0b01111000: // js ???
+		disp := decodeDispositionShort(src)
+		op = OpJs
+		opn = Operands{disp}
+	case i1 == 0b01110111: // jnbe ???
+		disp := decodeDispositionShort(src)
+		op = OpJnbe
+		opn = Operands{disp}
 	case i1 == 0b01110110: // jbe ???
 		disp := decodeDispositionShort(src)
 		op = OpJbe
 		opn = Operands{disp}
-	case i1 == 0b01110101:
+	case i1 == 0b01110101: // jne ???
+		disp := decodeDispositionShort(src)
+		op = OpJne
+		opn = Operands{disp}
 	case i1 == 0b01110100: // je ???
 		disp := decodeDispositionShort(src)
 		op = OpJe
 		opn = Operands{disp}
-	case i1 == 0b01110011:
+	case i1 == 0b01110011: // jnb ???
+		disp := decodeDispositionShort(src)
+		op = OpJnb
+		opn = Operands{disp}
 	case i1 == 0b01110010: // jb ???
 		disp := decodeDispositionShort(src)
 		op = OpJb
 		opn = Operands{disp}
-	case i1 == 0b01110001:
-	case i1 == 0b01110000:
-	case i1 == 0b00111111:
-	case i1 == 0b00110111:
-	case i1 == 0b00101111:
-	case i1 == 0b00100111:
+	case i1 == 0b01110001: // jno ???
+		disp := decodeDispositionShort(src)
+		op = OpJno
+		opn = Operands{disp}
+	case i1 == 0b01110000: // jo ???
+		disp := decodeDispositionShort(src)
+		op = OpJo
+		opn = Operands{disp}
+	case i1 == 0b00111111: // aas
+		op = OpAAS
+	case i1 == 0b00110111: // aaa
+		op = OpAAA
+	case i1 == 0b00101111: // das
+		op = OpDAS
+	case i1 == 0b00100111: // baa
+		op = OpBAA
 	case (i1 & 0b11111110) == 0b11111110:
 	case (i1 & 0b11111110) == 0b11110110:
 	case (i1 & 0b11111110) == 0b11110010:
@@ -1063,7 +1146,10 @@ func decode(src *Source) (inst Instruction, err error) {
 		//w := W(i1)
 		op = OpOutVarPort
 		// @fixme: operands?
-	case (i1 & 0b11111110) == 0b11101100:
+	case (i1 & 0b11111110) == 0b11101100: // in ax, ds // in al, ds
+		w := W(i1)
+		op = OpInVarPort
+		opn = Operands{Register{name: RegA, width: w}, Register{name: RegD, width: 1}}
 	case (i1 & 0b11111110) == 0b11100110:
 	case (i1 & 0b11111110) == 0b11100100: // in ???
 		w := W(i1)
@@ -1081,7 +1167,11 @@ func decode(src *Source) (inst Instruction, err error) {
 		opn = Operands{Register{name: RegA, width: w}, imm}
 	case (i1 & 0b11111110) == 0b10100110:
 	case (i1 & 0b11111110) == 0b10100100:
-	case (i1 & 0b11111110) == 0b10100000:
+	case (i1 & 0b11111110) == 0b10100000: // mov ax, addr // mov al, addr
+		w := W(i1)
+		addr := decodeAddress(src, w)
+		op = OpMovAccMem
+		opn = Operands{Register{name: RegA, width: w}, addr}
 	case (i1 & 0b11111110) == 0b10000110: // xchg rm, reg
 		w := W(i1)
 		reg, rm := decodeModRegRm(src, w)
@@ -1184,7 +1274,10 @@ func decode(src *Source) (inst Instruction, err error) {
 		_, rm := decodeModRegRm(src, 1)
 		op = OpEsc
 		opn = Operands{rm}
-	case (i1 & 0b11111000) == 0b10010000:
+	case (i1 & 0b11111000) == 0b10010000: // xchg reg, ax
+		reg := REG1(i1)
+		op = OpXchgAccReg
+		opn = Operands{Register{name: reg, width: 1}, Register{name: RegA, width: 1}}
 	case (i1 & 0b11111000) == 0b01011000: // pop reg
 		reg := REG1(i1)
 		op = OpPopReg
@@ -1243,8 +1336,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 		offset := i
 		i1 := text[i]; i++
 		switch {
-		default:
-			err = errors.Join(err, fmt.Errorf("unrecognized instruction: %x", i1))
 		case (i1 & 0b11111110) == 0b11000110:
 			i2 := text[i]; i++
 			bs := make([]byte, 0, 6)
@@ -1299,36 +1390,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: Operands{
 					opRM,
 					Immediate{width: w, value: data},
-				},
-			})
-		case (i1 & 0b11111110) == 0b10100000:
-			i2 := text[i]; i++
-			i3 := text[i]; i++
-			w := W(i1)
-			addr := (int16(i3) << 8) ^ int16(i2)
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2,i3},
-				operation: OpMovAccMem,
-				operands: Operands{
-					Register{name: RegA, width: w},
-					Address{width: w, addr: addr},
-				},
-			})
-		case i1 == 0b10100010:
-			i2 := text[i]; i++
-			i3 := text[i]; i++
-			w := W(i1)
-			addr := (int16(i3) << 8) ^ int16(i2)
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2,i3},
-				operation: OpMovMemAcc,
-				operands: Operands{
-					Address{width: w, addr: addr},
-					Register{name: RegA, width: w},
 				},
 			})
 		case (i1 & 0b11111101) == 0b10001100:
@@ -1407,62 +1468,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				bytes: [6]byte{i1,i2,i3,i4},
 				operation: OpPopRm,
 				operands: Operands{opRM},
-			})
-		case (i1 & 0b11111000) == 0b10010000:
-			reg := REG1(i1)
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpXchgAccReg,
-				operands: Operands{
-					Register{name: reg, width: 0b1},
-					Register{name: RegA, width: 0b1},
-				},
-			})
-		case (i1 & 0b11111110) == 0b11101100:
-			w := W(i1)
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpInVarPort,
-				operands: Operands{
-					Register{width: w, name: RegA},
-					Register{width: 0b1, name: RegD},
-				},
-			})
-		case i1 == 0b10011111:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpLAHF,
-				operands: nil,
-			})
-		case i1 == 0b10011110:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpSAHF,
-				operands: nil,
-			})
-		case i1 == 0b10011100:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpPUSHF,
-				operands: nil,
-			})
-		case i1 == 0b10011101:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpPOPF,
-				operands: nil,
 			})
 		case (i1 & 0b11111100) == 0b10000000:
 			i2 := text[i]; i++
@@ -1602,22 +1607,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operation: op,
 				operands: Operands{opRM},
 			})
-		case i1 == 0b00110111:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpAAA,
-				operands: nil,
-			})
-		case i1 == 0b00100111:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpBAA,
-				operands: nil,
-			})
 		case (i1 & 0b11111110) == 0b11110110:
 			i2 := text[i]; i++
 			bs := make([]byte, 0, 6)
@@ -1687,38 +1676,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				bytes: [6]byte(bs),
 				operation: op,
 				operands: operands,
-			})
-		case i1 == 0b00111111:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpAAS,
-				operands: nil,
-			})
-		case i1 == 0b00101111:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpDAS,
-				operands: nil,
-			})
-		case i1 == 0b10011000:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpCBW,
-				operands: nil,
-			})
-		case i1 == 0b10011001:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpCWD,
-				operands: nil,
 			})
 		case (i1 & 0b11111100) == 0b11010000:
 			i2 := text[i]; i++
@@ -1841,275 +1798,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				operands: nil,
 			})
 			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
-		case i1 == 0b11000011:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpRetSeg,
-				operands: nil,
-			})
-		case i1 == 0b11001011:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpRetInterSeg,
-				operands: nil,
-			})
-		case i1 == 0b01110000:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpJo,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b01111000:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpJs,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b01110101:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpJne,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b01111101:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpJnl,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b01111111:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpJnle,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b01110011:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpJnb,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b01110111:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpJnbe,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b01111011:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpJnp,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b01110001:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpJno,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b01111001:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpJns,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b11100010:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpLoop,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b11100001:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpLoopz,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b11100000:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpLoopnz,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b11100011:
-			i2 := text[i]; i++
-			disp := uint16(int16(int8(i2)))
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpJcxz,
-				operands: Operands{Immediate{width: 1, value: uint16(offset + 2) + disp}},
-			})
-		case i1 == 0b11001100:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpIntType3,
-				operands: nil,
-			})
-		case i1 == 0b11001101:
-			i2 := text[i]; i++
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpIntTypeSpecified,
-				operands: Operands{Immediate{width: 0, value: uint16(i2)}},
-			})
-		case i1 == 0b11001110:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpInto,
-				operands: nil,
-			})
-		case i1 == 0b11001111:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpIret,
-				operands: nil,
-			})
-		case i1 == 0b11111000:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpClc,
-				operands: nil,
-			})
-		case i1 == 0b11110101:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpCmc,
-				operands: nil,
-			})
-		case i1 == 0b11111001:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpStc,
-				operands: nil,
-			})
-		case i1 == 0b11111100:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpCld,
-				operands: nil,
-			})
-		case i1 == 0b11111101:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpStd,
-				operands: nil,
-			})
-		case i1 == 0b11111010:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpCli,
-				operands: nil,
-			})
-		case i1 == 0b11111011:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpSti,
-				operands: nil,
-			})
-		case i1 == 0b11110100:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpHlt,
-				operands: nil,
-			})
-		case i1 == 0b10011011:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpWait,
-				operands: nil,
-			})
-		case i1 == 0b11110000:
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpLock,
-				operands: nil,
-			})
 		}
 	}
 	return insts, err
