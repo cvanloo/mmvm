@@ -161,11 +161,16 @@ const (
 	OpXorRmImm
 	OpXorAccImm
 	OpRep
-	OpMovs
-	OpCmps
-	OpScas
-	OpLods
-	OpStos
+	OpMovsb
+	OpCmpsb
+	OpScasb
+	OpLodsb
+	OpStosb
+	OpMovsw
+	OpCmpsw
+	OpScasw
+	OpLodsw
+	OpStosw
 	OpCallDirSeg
 	OpCallIndirSeg
 	OpCallDirInterSeg
@@ -380,15 +385,15 @@ func (op Operation) Description() string {
 		return "XOR Immediate to Accumulator"
 	case OpRep:
 		return "REP Repeat"
-	case OpMovs:
+	case OpMovsb, OpMovsw:
 		return "MOVS Move Byte/Word"
-	case OpCmps:
+	case OpCmpsb, OpCmpsw:
 		return "CMPS Compare Byte/Word"
-	case OpScas:
+	case OpScasb, OpScasw:
 		return "SCAS Scan Byte/Word"
-	case OpLods:
+	case OpLodsb, OpLodsw:
 		return "LODS Load Byte/Word to AL/AX"
-	case OpStos:
+	case OpStosb, OpStosw:
 		return "STOS Store Byte/Word from AL/AX"
 	case OpCallDirSeg:
 		return "CALL Direct within Segment"
@@ -589,16 +594,26 @@ func (op Operation) String() string {
 		return "xor"
 	case OpRep:
 		return "rep"
-	case OpMovs:
-		return "movs"
-	case OpCmps:
-		return "cmps"
-	case OpScas:
-		return "scas"
-	case OpLods:
-		return "lods"
-	case OpStos:
-		return "stos"
+	case OpMovsb:
+		return "movsb"
+	case OpCmpsb:
+		return "cmpsb"
+	case OpScasb:
+		return "scasb"
+	case OpLodsb:
+		return "lodsb"
+	case OpStosb:
+		return "stosb"
+	case OpMovsw:
+		return "movsw"
+	case OpCmpsw:
+		return "cmpsw"
+	case OpScasw:
+		return "scasw"
+	case OpLodsw:
+		return "lodsw"
+	case OpStosw:
+		return "stosw"
 	case OpJmpDirSeg, OpJmpIndirSeg, OpJmpDirInterSeg, OpJmpIndirInterSeg:
 		return "jmp"
 	case OpJmpShortDirSeg:
@@ -768,7 +783,11 @@ func (r Repeated) String() string {
 }
 
 func (r Repeated) AsmString() string {
-	return fmt.Sprintf("%s %s", r.operation, r.operands)
+	if len(r.operands) > 0 {
+		return fmt.Sprintf("%s %s", r.operation, r.operands)
+	} else {
+		return fmt.Sprintf("%s", r.operation)
+	}
 }
 
 func (inst Instruction) String() string {
@@ -995,26 +1014,26 @@ func decodeRepeated(src *Source) (repd Repeated, err error) {
 	switch i1 := src.Next(); {
 	default:
 		err = fmt.Errorf("unrecognized opcode: %02x", i1)
-	case (i1 & 0b11111110) == 0b10100100: // movs{b,w} ???
-		w := W(i1)
-		op = OpMovs
-		_ = w // @fixme: depending on w, need to disas as either movsb or movsw [:b-or-w:]
-	case (i1 & 0b11111110) == 0b10100110: // cmps{b,w} ???
-		w := W(i1)
-		op = OpCmps
-		_ = w // @fixme: depending on w, need to disas as either cmpsb or cmpsw [:b-or-w:]
-	case (i1 & 0b11111110) == 0b10101110: // scas{b,w} ???
-		w := W(i1)
-		op = OpScas
-		_ = w // @fixme: depending on w, need to disas as either scasb or scasw [:b-or-w:]
-	case (i1 & 0b11111110) == 0b10101100: // lods{b,w} ???
-		w := W(i1)
-		op = OpLods
-		_ = w // @fixme: depending on w, need to disas as either lodsb or lodsw [:b-or-w:]
-	case (i1 & 0b11111110) == 0b10101010: // stos{b,w} ???
-		w := W(i1)
-		op = OpStos
-		_ = w // @fixme: depending on w, need to disas as either stosb or stosw [:b-or-w:]
+	case i1 == 0b10101111: // scasw
+		op = OpScasw
+	case i1 == 0b10101110: // scasb
+		op = OpScasb
+	case i1 == 0b10101101: // lodsw
+		op = OpLodsw
+	case i1 == 0b10101100: // lodsb
+		op = OpLodsb
+	case i1 == 0b10101011: // stosw
+		op = OpStosw
+	case i1 == 0b10101010: // stosb
+		op = OpStosb
+	case i1 == 0b10100111: // cmpsw
+		op = OpCmpsw
+	case i1 == 0b10100110: // cmpsb
+		op = OpCmpsb
+	case i1 == 0b10100101: // movsw
+		op = OpMovsw
+	case i1 == 0b10100100: // movsb
+		op = OpMovsb
 	}
 	return Repeated {
 		operation: op,
@@ -1123,6 +1142,26 @@ func decode(src *Source) (inst Instruction, err error) {
 		data := decodeImmediate(src, 1)
 		op = OpRetSegImm
 		opn = Operands{data}
+	case i1 == 0b10101111: // scasw
+		op = OpScasw
+	case i1 == 0b10101110: // scasb
+		op = OpScasb
+	case i1 == 0b10101101: // lodsw
+		op = OpLodsw
+	case i1 == 0b10101100: // lodsb
+		op = OpLodsb
+	case i1 == 0b10101011: // stosw
+		op = OpStosw
+	case i1 == 0b10101010: // stosb
+		op = OpStosb
+	case i1 == 0b10100111: // cmpsw
+		op = OpCmpsw
+	case i1 == 0b10100110: // cmpsb
+		op = OpCmpsb
+	case i1 == 0b10100101: // movsw
+		op = OpMovsw
+	case i1 == 0b10100100: // movsb
+		op = OpMovsb
 	case i1 == 0b10100010: // mov mem, ax // mov mem, al
 		w := W(i1)
 		addr := decodeAddress(src, w)
@@ -1288,31 +1327,11 @@ func decode(src *Source) (inst Instruction, err error) {
 		imm := decodeImmediate(src, w)
 		op = OpMovRmImm
 		opn = Operands{rm, imm}
-	case (i1 & 0b11111110) == 0b10101110: // scas{b,w} ???
-		w := W(i1)
-		op = OpScas
-		_ = w // @fixme: [:b-or-w:]
-	case (i1 & 0b11111110) == 0b10101100: // lods{b,w} ???
-		w := W(i1)
-		op = OpLods
-		_ = w // @fixme: [:b-or-w:]
-	case (i1 & 0b11111110) == 0b10101010: // stos{b,w} ???
-		w := W(i1)
-		op = OpStos
-		_ = w // @fixme: [:b-or-w:]
 	case (i1 & 0b11111110) == 0b10101000: // test ax, imm
 		w := W(i1)
 		imm := decodeImmediate(src, w)
 		op = OpTestAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
-	case (i1 & 0b11111110) == 0b10100110: // cmps{b,w} ???
-		w := W(i1)
-		op = OpCmps
-		_ = w // @fixme: [:b-or-w:]
-	case (i1 & 0b11111110) == 0b10100100: // movs{b,w} ???
-		w := W(i1)
-		op = OpMovs
-		_ = w // @fixme: [:b-or-w:]
 	case (i1 & 0b11111110) == 0b10100000: // mov ax, addr // mov al, addr
 		w := W(i1)
 		addr := decodeAddress(src, w)
