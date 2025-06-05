@@ -884,13 +884,17 @@ func (s *Source) IsEnd() bool {
 }
 
 func decodeImmediate(src *Source, width byte) Immediate {
-	b1 := src.Next()
-	data := int16(int8(b1))
+	var data uint16
 	if width == 1 {
+		b1 := src.Next()
 		b2 := src.Next()
-		data = (int16(b2) << 8) ^ data
+		data = (uint16(b2) << 8) ^ uint16(b1)
+	} else {
+		b1 := src.Next()
+		//data = uint16(int16(int8(b1)))
+		data = uint16(b1)
 	}
-	return Immediate{width: width, value: uint16(data)} // @fixme: ?u?int16
+	return Immediate{width: width, value: data} // @fixme: ?u?int16
 }
 
 func decodeDisposition(src *Source) Immediate {
@@ -913,8 +917,8 @@ func decodeAddress(src *Source, width byte) Address {
 	//        mov word opn1, opn2
 	b1 := src.Next()
 	b2 := src.Next()
-	addr := (int16(b2) << 8) ^ int16(b1)
-	return Address{width: width, addr: addr}
+	addr := (uint16(b2) << 8) ^ uint16(b1)
+	return Address{width: width, addr: int16(addr)} // @fixme: ?u?int16
 }
 
 func decodeDirectIntersegment(src *Source) SegmentOffset {
@@ -1102,7 +1106,7 @@ func decode(src *Source) (inst Instruction, err error) {
 	case i1 == 0b11001011: // ret ???
 		op = OpRetInterSeg
 	case i1 == 0b11001010: // ret @fixme: ???
-		data := decodeDisposition(src)
+		data := decodeImmediate(src, 1)
 		op = OpRetInterSegImm
 		opn = Operands{data}
 	case i1 == 0b11000101: // lds reg, rm
@@ -1115,8 +1119,8 @@ func decode(src *Source) (inst Instruction, err error) {
 		opn = Operands{reg, rm}
 	case i1 == 0b11000011: // ret ???
 		op = OpRetSeg
-	case i1 == 0b11000010: // ret @fixme: ???
-		data := decodeDisposition(src)
+	case i1 == 0b11000010: // ret imm
+		data := decodeImmediate(src, 1)
 		op = OpRetSegImm
 		opn = Operands{data}
 	case i1 == 0b10100010: // mov mem, ax // mov mem, al
