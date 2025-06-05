@@ -36,6 +36,10 @@ type (
 		operation Operation
 		operands Operands
 	}
+	Repeated struct {
+		operation Operation
+		operands Operands
+	}
 	Register struct {
 		name, width byte
 	}
@@ -755,6 +759,14 @@ func (imm Immediate) AsmString() string {
 	//	return fmt.Sprintf("%x", imm.value)
 }
 
+func (r Repeated) String() string {
+	return r.AsmString()
+}
+
+func (r Repeated) AsmString() string {
+	return fmt.Sprintf("%s %s", r.operation, r.operands)
+}
+
 func (inst Instruction) String() string {
 	sizeSpecifier := func() string {
 		if len(inst.operands) >= 2 {
@@ -937,6 +949,41 @@ func srcdst(d byte, op1, op2 Operand) Operands {
 }
 
 var ErrDecode = errors.New("decode error")
+
+func decodeRepeated(src *Source) (repd Repeated, err error) {
+	var (
+		op Operation
+		opn Operands
+	)
+	switch i1 := src.Next(); {
+	default:
+		err = fmt.Errorf("unrecognized opcode: %02x", i1)
+	case (i1 & 0b11111110) == 0b10100100: // movs{b,w} ???
+		w := W(i1)
+		op = OpMovs
+		_ = w // @fixme: depending on w, need to disas as either movsb or movsw [:b-or-w:]
+	case (i1 & 0b11111110) == 0b10100110: // cmps{b,w} ???
+		w := W(i1)
+		op = OpCmps
+		_ = w // @fixme: depending on w, need to disas as either cmpsb or cmpsw [:b-or-w:]
+	case (i1 & 0b11111110) == 0b10101110: // scas{b,w} ???
+		w := W(i1)
+		op = OpScas
+		_ = w // @fixme: depending on w, need to disas as either scasb or scasw [:b-or-w:]
+	case (i1 & 0b11111110) == 0b10101100: // lods{b,w} ???
+		w := W(i1)
+		op = OpLods
+		_ = w // @fixme: depending on w, need to disas as either lodsb or lodsw [:b-or-w:]
+	case (i1 & 0b11111110) == 0b10101010: // stos{b,w} ???
+		w := W(i1)
+		op = OpStos
+		_ = w // @fixme: depending on w, need to disas as either stosb or stosw [:b-or-w:]
+	}
+	return Repeated {
+		operation: op,
+		operands: opn,
+	}, err
+}
 
 func decode(src *Source) (inst Instruction, err error) {
 	var (
@@ -1141,7 +1188,13 @@ func decode(src *Source) (inst Instruction, err error) {
 		op = OpBAA
 	case (i1 & 0b11111110) == 0b11111110:
 	case (i1 & 0b11111110) == 0b11110110:
-	case (i1 & 0b11111110) == 0b11110010:
+	case (i1 & 0b11111110) == 0b11110010: // rep <string instruction>
+		z := W(i1)
+		op = OpRep
+		var repd Operand
+		repd, err = decodeRepeated(src)
+		opn = Operands{repd}
+		_ = z // @fixme: the heck is z?
 	case (i1 & 0b11111110) == 0b11101110: // out ???
 		//w := W(i1)
 		op = OpOutVarPort
@@ -1157,16 +1210,31 @@ func decode(src *Source) (inst Instruction, err error) {
 		op = OpInFixedPort
 		opn = Operands{Register{name: RegA, width: w}, Immediate{width: w, value: port}}
 	case (i1 & 0b11111110) == 0b11000110:
-	case (i1 & 0b11111110) == 0b10101110:
-	case (i1 & 0b11111110) == 0b10101100:
-	case (i1 & 0b11111110) == 0b10101010:
+	case (i1 & 0b11111110) == 0b10101110: // scas{b,w} ???
+		w := W(i1)
+		op = OpScas
+		_ = w // @fixme: [:b-or-w:]
+	case (i1 & 0b11111110) == 0b10101100: // lods{b,w} ???
+		w := W(i1)
+		op = OpLods
+		_ = w // @fixme: [:b-or-w:]
+	case (i1 & 0b11111110) == 0b10101010: // stos{b,w} ???
+		w := W(i1)
+		op = OpStos
+		_ = w // @fixme: [:b-or-w:]
 	case (i1 & 0b11111110) == 0b10101000: // test ax, imm
 		w := W(i1)
 		imm := decodeImmediate(src, w)
 		op = OpTestAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
-	case (i1 & 0b11111110) == 0b10100110:
-	case (i1 & 0b11111110) == 0b10100100:
+	case (i1 & 0b11111110) == 0b10100110: // cmps{b,w} ???
+		w := W(i1)
+		op = OpCmps
+		_ = w // @fixme: [:b-or-w:]
+	case (i1 & 0b11111110) == 0b10100100: // movs{b,w} ???
+		w := W(i1)
+		op = OpMovs
+		_ = w // @fixme: [:b-or-w:]
 	case (i1 & 0b11111110) == 0b10100000: // mov ax, addr // mov al, addr
 		w := W(i1)
 		addr := decodeAddress(src, w)
@@ -1736,68 +1804,6 @@ func decode(text []byte) (insts []Instruction, err error) {
 				inst.operands = Operands{opRM, Register{name: RegC, width: 0}}
 			}
 			insts = append(insts, inst)
-		case (i1 & 0b11111110) == 0b11110010:
-			z := W(i1)
-			i2 := text[i]; i++
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1,i2},
-				operation: OpRep,
-				operands: nil,
-			})
-			_ = z // @todo: the heck is z?
-			// @fixme: rep is followed by another STRING instruction as its operand
-		case (i1 & 0b11111110) == 0b10100100:
-			w := W(i1)
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpMovs,
-				operands: nil,
-			})
-			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
-		case (i1 & 0b11111110) == 0b10100110:
-			w := W(i1)
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpCmps,
-				operands: nil,
-			})
-			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
-		case (i1 & 0b11111110) == 0b10101110:
-			w := W(i1)
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpScas,
-				operands: nil,
-			})
-			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
-		case (i1 & 0b11111110) == 0b10101100:
-			w := W(i1)
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpLods,
-				operands: nil,
-			})
-			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
-		case (i1 & 0b11111110) == 0b10101010:
-			w := W(i1)
-			insts = append(insts, Instruction {
-				offset: offset,
-				size: i - offset,
-				bytes: [6]byte{i1},
-				operation: OpStos,
-				operands: nil,
-			})
-			_ = w // @fixme: depending on w, need to disas as movsb or movsw [:b-or-w:]
 		}
 	}
 	return insts, err
