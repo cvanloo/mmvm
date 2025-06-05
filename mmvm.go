@@ -867,6 +867,10 @@ func (s *Source) Next() (b byte) {
 	return b
 }
 
+func (s *Source) B(i int) (b byte) {
+	return s.Text[s.Consumed+i]
+}
+
 func (s *Source) Consume() (bs []byte, offset, size int) {
 	offset = s.Consumed
 	size = s.Pos - s.Consumed
@@ -1230,7 +1234,7 @@ func decode(src *Source) (inst Instruction, err error) {
 			0b100: OpJmpIndirSeg,
 			0b101: OpJmpIndirInterSeg,
 			0b110: OpPushRm,
-		}[REG(i1)]
+		}[REG(src.B(1))]
 		opn = Operands{rm}
 	case (i1 & 0b11111110) == 0b11110110: // {test,not,neg,mul,imul,div,idiv} ???
 		w := W(i1)
@@ -1243,7 +1247,7 @@ func decode(src *Source) (inst Instruction, err error) {
 			0b101: OpImul,
 			0b110: OpDiv,
 			0b111: OpIdiv,
-		}[REG(i1)]
+		}[REG(src.B(1))]
 		opn = Operands{rm}
 		if op == OpTestRmImm {
 			imm := decodeImmediate(src, w)
@@ -1264,10 +1268,14 @@ func decode(src *Source) (inst Instruction, err error) {
 		w := W(i1)
 		op = OpInVarPort
 		opn = Operands{Register{name: RegA, width: w}, Register{name: RegD, width: 1}}
-	case (i1 & 0b11111110) == 0b11100110:
-	case (i1 & 0b11111110) == 0b11100100: // in ???
+	case (i1 & 0b11111110) == 0b11100110: // out ax, imm // out al, imm
 		w := W(i1)
-		port := uint16(int16(int8(src.Next())))
+		port := uint16(src.Next()) // don't sign extend
+		op = OpOutFixedPort
+		opn = Operands{Register{name: RegA, width: w}, Immediate{width: w, value: port}}
+	case (i1 & 0b11111110) == 0b11100100: // in ax, imm // in al, imm
+		w := W(i1)
+		port := uint16(src.Next()) // don't sign extend
 		op = OpInFixedPort
 		opn = Operands{Register{name: RegA, width: w}, Immediate{width: w, value: port}}
 	case (i1 & 0b11111110) == 0b11000110: // mov rm, imm
@@ -1351,6 +1359,11 @@ func decode(src *Source) (inst Instruction, err error) {
 		imm := decodeImmediate(src, w)
 		op = OpAddAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
+	case (i1 & 0b11111110) == 0b00011100: // sbb ax, imm
+		w := W(i1)
+		imm := decodeImmediate(src, w)
+		op = OpSsbAccImm
+		opn = Operands{Register{name: RegA, width: w}, imm}
 	case (i1 & 0b11111101) == 0b10001100: // mov rm, seg // mov seg, rm
 		d := D(i1)
 		seg, rm := decodeModSegRm(src, 1)
@@ -1367,7 +1380,7 @@ func decode(src *Source) (inst Instruction, err error) {
 			0b100: OpShlSal,
 			0b101: OpShr,
 			0b111: OpSar,
-		}[REG(i1)]
+		}[REG(src.B(1))]
 		if v == 0 { // count is 1
 			opn = Operands{rm, Immediate{width: w, value: 1}}
 		} else { // count is in CL
@@ -1390,7 +1403,7 @@ func decode(src *Source) (inst Instruction, err error) {
 			0b101: OpSubRmImm,
 			0b110: OpXorRegRm,
 			0b111: OpCmpRmImm,
-		}[REG(i1)]
+		}[REG(src.B(1))]
 		_, sMustBeZero := map[Operation]struct{}{
 			OpOrRmImm: {},
 			OpAndRmImm: {},
@@ -1434,11 +1447,6 @@ func decode(src *Source) (inst Instruction, err error) {
 		reg, rm := decodeModRegRm(src, w)
 		op = OpSsbRegRm
 		opn = srcdst(d, rm, reg)
-	//case (i1 & 0b11111100) == 0b00011000: // sbb ax, imm // @fixme: reference seems to be missing a bit
-	//	w := W(i1)
-	//	imm := decodeImmediate(src, w)
-	//	op = OpSsbAccImm
-	//	opn = Operands{Register{name: RegA, width: w}, imm}
 	case (i1 & 0b11111100) == 0b00010000: // adc reg, rm // adc rm, reg
 		d, w := DW(i1)
 		reg, rm := decodeModRegRm(src, w)
