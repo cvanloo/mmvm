@@ -63,6 +63,10 @@ type (
 		width byte
 		value uint16
 	}
+	SignedImmediate struct {
+		width byte
+		value int16
+	}
 )
 
 const (
@@ -773,9 +777,14 @@ func (imm Immediate) String() string {
 
 func (imm Immediate) AsmString() string {
 	return fmt.Sprintf("%0[1]*x", (imm.width+1)*2, imm.value)
-	//return fmt.Sprintf("%04x", uint16(imm.value))
-	// @todo: create UnpaddedImmediate
-	//	return fmt.Sprintf("%x", imm.value)
+}
+
+func (imm SignedImmediate) String() string {
+	return imm.AsmString()
+}
+
+func (imm SignedImmediate) AsmString() string {
+	return fmt.Sprintf("%x", imm.value)
 }
 
 func (r Repeated) String() string {
@@ -914,6 +923,19 @@ func decodeImmediate(src *Source, width byte) Immediate {
 		data = uint16(b1)
 	}
 	return Immediate{width: width, value: data} // @fixme: ?u?int16
+}
+
+func decodeSignedImmediate(src *Source, width byte) SignedImmediate {
+	var data int16
+	if width == 1 {
+		b1 := src.Next()
+		b2 := src.Next()
+		data = (int16(b2) << 8) ^ int16(b1)
+	} else {
+		b1 := src.Next()
+		data = int16(int8(b1))
+	}
+	return SignedImmediate{width: width, value: data}
 }
 
 func decodeDisposition(src *Source) Immediate {
@@ -1293,7 +1315,7 @@ func decode(src *Source) (inst Instruction, err error) {
 		}[REG(src.B(1))]
 		opn = Operands{rm}
 		if op == OpTestRmImm {
-			imm := decodeImmediate(src, w)
+			imm := decodeSignedImmediate(src, w)
 			opn = append(opn, imm)
 		}
 	case (i1 & 0b11111110) == 0b11110010: // rep <string instruction>
@@ -1318,9 +1340,9 @@ func decode(src *Source) (inst Instruction, err error) {
 		opn = Operands{Register{name: RegA, width: w}, Immediate{width: w, value: port}}
 	case (i1 & 0b11111110) == 0b11100100: // in ax, imm // in al, imm
 		w := W(i1)
-		port := uint16(src.Next()) // don't sign extend
+		port := int16(src.Next()) // don't sign extend
 		op = OpInFixedPort
-		opn = Operands{Register{name: RegA, width: w}, Immediate{width: w, value: port}}
+		opn = Operands{Register{name: RegA, width: w}, SignedImmediate{width: w, value: port}}
 	case (i1 & 0b11111110) == 0b11000110: // mov rm, imm
 		w := W(i1)
 		_, rm := decodeModRegRm(src, w) // @todo: we *could* verify that reg part is 000 [:reg-000:]
@@ -1405,7 +1427,7 @@ func decode(src *Source) (inst Instruction, err error) {
 			0b111: OpSar,
 		}[REG(src.B(1))]
 		if v == 0 { // count is 1
-			opn = Operands{rm, Immediate{width: w, value: 1}}
+			opn = Operands{rm, SignedImmediate{width: w, value: 1}}
 		} else { // count is in CL
 			opn = Operands{rm, Register{name: RegC, width: 0}}
 		}
@@ -1443,7 +1465,12 @@ func decode(src *Source) (inst Instruction, err error) {
 			d2 := src.Next()
 			data = (int16(d2) << 8) ^ data
 		}
-		imm := Immediate{width: w, value: uint16(data)}
+		var imm Operand
+		if s == 1 && w == 1 {
+			imm = SignedImmediate{width: w, value: data}
+		} else {
+			imm = Immediate{width: w, value: uint16(data)}
+		}
 		opn = Operands{rm, imm}
 	case (i1 & 0b11111100) == 0b00111000: // cmp reg, rm // cmp rm, reg
 		d, w := DW(i1)
