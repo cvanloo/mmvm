@@ -806,11 +806,12 @@ func (inst Instruction) String() string {
 			case Memory:
 				switch imm := inst.operands[1].(type) {
 				case Immediate:
-					switch imm.width {
-					case 0:
+					if imm.width == 0 {
 						return " byte"
-					case 1:
-						//return " word"
+					}
+				case SignedImmediate:
+					if imm.width == 0 {
+						return " byte"
 					}
 				}
 			}
@@ -1315,8 +1316,11 @@ func decode(src *Source) (inst Instruction, err error) {
 		}[REG(src.B(1))]
 		opn = Operands{rm}
 		if op == OpTestRmImm {
-			imm := decodeSignedImmediate(src, w)
-			opn = append(opn, imm)
+			if w == 1 {
+				opn = append(opn, decodeImmediate(src, w))
+			} else {
+				opn = append(opn, decodeSignedImmediate(src, w))
+			}
 		}
 	case (i1 & 0b11111110) == 0b11110010: // rep <string instruction>
 		z := W(i1)
