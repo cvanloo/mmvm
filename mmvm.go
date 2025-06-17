@@ -776,7 +776,7 @@ func (imm Immediate) String() string {
 }
 
 func (imm Immediate) AsmString() string {
-	return fmt.Sprintf("%0[1]*x", (imm.width+1)*2, imm.value)
+	return fmt.Sprintf("%0[1]*x", (imm.width)*4, imm.value)
 }
 
 func (imm SignedImmediate) String() string {
