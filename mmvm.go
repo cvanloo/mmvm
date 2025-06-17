@@ -230,7 +230,7 @@ func (op Operation) Description() string {
 	default:
 		panic("unknown operation")
 	case OpInvalid:
-		panic("invalid operation")
+		return "(undefined)"
 	case OpMovRegRm:
 		return "MOV Register/Memory to/from Register"
 	case OpMovRmImm:
@@ -503,7 +503,7 @@ func (op Operation) String() string {
 	default:
 		panic("unknown operation")
 	case OpInvalid:
-		panic("invalid operation")
+		return "(undefined)"
 	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
 		return "mov"
 	case OpPushRm, OpPushReg, OpPushSeg:
@@ -1065,6 +1065,22 @@ func decodeRepeated(src *Source) (repd Repeated, err error) {
 }
 
 func decode(src *Source) (inst Instruction, err error) {
+	defer func() {
+		r := recover()
+		if r != nil {
+			bs, offset, size := src.Consume()
+			bytes := [6]byte{}
+			copy(bytes[:], bs)
+			inst = Instruction {
+				offset: offset,
+				size: size,
+				bytes: bytes,
+				operation: OpInvalid,
+				operands: nil,
+			}
+			err = errors.Join(err, fmt.Errorf("panicked: %v", r))
+		}
+	}()
 	var (
 		op Operation
 		opn Operands
@@ -1603,7 +1619,8 @@ func main() {
 
 	insts, err := disassemble(text)
 	if err != nil {
-		log.Fatal(err)
+		//log.Fatal(err)
+		log.Println(err)
 	}
 	for _, inst := range insts {
 		fmt.Println(inst)
