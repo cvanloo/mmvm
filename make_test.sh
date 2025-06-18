@@ -1,14 +1,36 @@
 #!/usr/bin/env bash
 
-A="${A:-a.out}"
-
+go build mmvm.go || exit 1
 if ! command -v mmvm 2>&1 >/dev/null
 then
     echo "mmvm installation not found"
     exit 1
 fi
 
-go build mmvm.go || exit 1
-./mmvm -d "$A" > mine.disas
-mmvm -d "$A" > other.disas 2>&1
-diff mine.disas other.disas
+function run_diff {
+    ./mmvm -d "$1" > mine.disas
+    mmvm -d "$1" > other.disas 2>&1
+    local d=$(diff mine.disas other.disas)
+    echo $d
+}
+
+if [[ "$1" == "all" ]]; then
+    TEST_FILES_DIR="${TEST_FILES_DIR:-test_programs}"
+    local st=0
+    for file in $TEST_FILES_DIR/*.out; do
+        d=$(run_diff $file)
+        if [[ -n "$d" ]]; then
+            st=1
+            echo $d
+        fi
+    done
+    exit $st
+else
+    A="${A:-a.out}"
+    d=$(run_diff $A)
+    if [[ -n "$d" ]]; then
+        echo $d
+        exit 1
+    fi
+fi
+
