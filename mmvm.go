@@ -12,7 +12,6 @@ import (
 	"flag"
 )
 
-// @fixme: sign extension is only perform by doing a double cast int16(int8(byte))
 // @todo: AT&T syntax printing
 
 type (
