@@ -12,6 +12,7 @@ import (
 	"flag"
 )
 
+// @todo: https://www.muppetlabs.com/~breadbox/txt/mopb.html
 // @todo: AT&T syntax printing
 
 type (
@@ -104,6 +105,8 @@ const (
 	RegBP
 	RegSI
 	RegDI
+	RegFLAGS
+	RegIP
 	RegAH = RegSP
 	RegCH = RegBP
 	RegDH = RegSI
@@ -572,10 +575,18 @@ func (inst Instruction) String() string {
 		return ""
 	}
 	if len(inst.operands) > 0 {
-		return fmt.Sprintf("%04x: %-13x %s%s %s", inst.offset, inst.bytes[:inst.size], inst.operation, sizeSpecifier(), inst.operands)
+		return fmt.Sprintf("%-13x %s%s %s", inst.bytes[:inst.size], inst.operation, sizeSpecifier(), inst.operands)
 	} else {
-		return fmt.Sprintf("%04x: %-13x %s", inst.offset, inst.bytes[:inst.size], inst.operation)
+		return fmt.Sprintf("%-13x %s", inst.bytes[:inst.size], inst.operation)
 	}
+}
+
+type InstructionStringWithOffset struct {
+	Instruction
+}
+
+func (iswo InstructionStringWithOffset) String() string {
+	return fmt.Sprintf("%04x: %s", iswo.Instruction.offset, iswo.Instruction)
 }
 
 func W(i byte) byte {
@@ -1343,181 +1354,275 @@ func disassemble(text []byte) (insts []Instruction, disasErr error) {
 
 type (
 	CPU struct {
-		Register struct {
-			AX, CX, DX, BX, SP, BP, SI, DI, IP, FLAGS uint16
-		}
+		RegisterFile [10]uint16
 		Memory RAM
 	}
 	RAM struct {
 		Text, Data []byte
 	}
+	Getter interface {
+		Get(cpu *CPU) (val uint16)
+	}
+	Setter interface {
+		Set(cpu *CPU, val uint16)
+	}
+	GetterSetter interface {
+		Getter
+		Setter
+	}
 )
+
+func (r Register) Get(cpu *CPU) (val uint16) {
+	return cpu.RegisterFile[r.name]
+}
+
+func (r Register) Set(cpu *CPU, val uint16) {
+	cpu.RegisterFile[r.name] = val
+}
+
+func (s Segment) Get(cpu *CPU) (val uint16) {
+	return cpu.RegisterFile[s.name]
+}
+
+func (s Segment) Set(cpu *CPU, val uint16) {
+	cpu.RegisterFile[s.name] = val
+}
+
+func (m Memory) Get(cpu *CPU) (val uint16) {
+	panic("not yet implemented")
+	return 0
+}
+
+func (m Memory) Set(cpu *CPU, val uint16) {
+	panic("not yet implemented")
+}
+
+func (i Immediate) Get(cpu *CPU) (val uint16) {
+	return i.value
+}
+
+func (i SignedImmediate) Get(cpu *CPU) (val uint16) {
+	return uint16(i.value)
+}
+
+func (cpu *CPU) String() string {
+	flags := func(flags uint16) string {
+		s := []byte("----")
+		CF := (flags >>  0) & 1
+		//PF := (flags >>  2) & 1
+		//AF := (flags >>  4) & 1
+		ZF := (flags >>  6) & 1
+		SF := (flags >>  7) & 1
+		//TF := (flags >>  8) & 1
+		//IF := (flags >>  9) & 1
+		//DF := (flags >> 10) & 1
+		OF := (flags >> 11) & 1
+		if CF == 1 {
+			s[3] = 'C'
+		}
+		if ZF == 1 {
+			s[2] = 'Z'
+		}
+		if SF == 1 {
+			s[1] = 'S'
+		}
+		if OF == 1 {
+			s[0] = 'O'
+		}
+		return string(s)
+	}
+	return fmt.Sprintf(
+		"%04x %04x %04x %04x %04x %04x %04x %04x %s %04x", 
+		cpu.RegisterFile[0], cpu.RegisterFile[1], cpu.RegisterFile[2],
+		cpu.RegisterFile[3], cpu.RegisterFile[4], cpu.RegisterFile[5],
+		cpu.RegisterFile[6], cpu.RegisterFile[7], flags(cpu.RegisterFile[8]),
+		cpu.RegisterFile[9],
+	)
+}
 
 func (cpu *CPU) Fetch() *Source {
 	return &Source{
 		Text: cpu.Memory.Text,
-		Consumed: int(cpu.Register.IP),
-		Pos: int(cpu.Register.IP),
+		Consumed: int(cpu.RegisterFile[RegIP]),
+		Pos: int(cpu.RegisterFile[RegIP]),
 	}
 }
 
-func emulate(text, data []byte) error {
+func (cpu *CPU) Decode(src *Source) (Instruction, error) {
+	return decode(src)
+}
+
+func (cpu *CPU) Step(inst Instruction) error {
+	switch inst.operation {
+	default:
+		fallthrough
+	case OpInvalid:
+		must(false, fmt.Errorf("invalid operation"))
+	case OpMovRegRm:
+	case OpMovRmImm:
+	case OpMovRegImm:
+	case OpMovAccMem:
+	case OpMovMemAcc:
+	case OpMovRmSeg:
+	case OpPushRm:
+	case OpPushReg:
+	case OpPushSeg:
+	case OpPopRm:
+	case OpPopReg:
+	case OpPopSeg:
+	case OpXchgRmReg:
+	case OpXchgAccReg:
+	case OpInFixedPort:
+	case OpInVarPort:
+	case OpOutFixedPort:
+	case OpOutVarPort:
+	case OpXLAT:
+	case OpLEA:
+	case OpLDS:
+	case OpLES:
+	case OpLAHF:
+	case OpSAHF:
+	case OpPUSHF:
+	case OpPOPF:
+	case OpAddRegRm:
+	case OpAddRmImm:
+	case OpAddAccImm:
+	case OpAdcRegRm:
+	case OpAdcRmImm:
+	case OpAdcAccImm:
+	case OpIncRm:
+	case OpIncReg:
+	case OpAAA:
+	case OpBAA:
+	case OpSubRegRm:
+	case OpSubRmImm:
+	case OpSubAccImm:
+	case OpSsbRegRm:
+	case OpSsbRmImm:
+	case OpSsbAccImm:
+	case OpDecRm:
+	case OpDecReg:
+	case OpNeg:
+	case OpCmpRegRm:
+	case OpCmpRmImm:
+	case OpCmpAccImm:
+	case OpAAS:
+	case OpDAS:
+	case OpMul:
+	case OpImul:
+	case OpAAM:
+	case OpDiv:
+	case OpIdiv:
+	case OpAAD:
+	case OpCBW:
+	case OpCWD:
+	case OpNot:
+	case OpShlSal:
+	case OpShr:
+	case OpSar:
+	case OpRol:
+	case OpRor:
+	case OpRcl:
+	case OpRcr:
+	case OpAndRegRm:
+	case OpAndRmImm:
+	case OpAndAccImm:
+	case OpTestRegRm:
+	case OpTestRmImm:
+	case OpTestAccImm:
+	case OpOrRegRm:
+	case OpOrRmImm:
+	case OpOrAccImm:
+	case OpXorRegRm, OpXorRmImm, OpXorAccImm:
+		dst := inst.operands[0].(GetterSetter)
+		src := inst.operands[1].(Getter)
+		dst.Set(cpu, dst.Get(cpu) ^ src.Get(cpu))
+	case OpRep:
+	case OpMovsb:
+	case OpCmpsb:
+	case OpScasb:
+	case OpLodsb:
+	case OpStosb:
+	case OpMovsw:
+	case OpCmpsw:
+	case OpScasw:
+	case OpLodsw:
+	case OpStosw:
+	case OpCallDirSeg:
+	case OpCallIndirSeg:
+	case OpCallDirInterSeg:
+	case OpCallIndirInterSeg:
+	case OpJmpDirSeg:
+	case OpJmpShortDirSeg:
+	case OpJmpIndirSeg:
+	case OpJmpDirInterSeg:
+	case OpJmpIndirInterSeg:
+	case OpRetSeg:
+	case OpRetSegImm:
+	case OpRetInterSeg:
+	case OpRetInterSegImm:
+	case OpJe:
+	case OpJl:
+	case OpJle:
+	case OpJb:
+	case OpJbe:
+	case OpJp:
+	case OpJo:
+	case OpJs:
+	case OpJne:
+	case OpJnl:
+	case OpJnle:
+	case OpJnb:
+	case OpJnbe:
+	case OpJnp:
+	case OpJno:
+	case OpJns:
+	case OpLoop:
+	case OpLoopz:
+	case OpLoopnz:
+	case OpJcxz:
+	case OpIntType3:
+	case OpIntTypeSpecified:
+	case OpInto:
+	case OpIret:
+	case OpClc:
+	case OpCmc:
+	case OpStc:
+	case OpCld:
+	case OpStd:
+	case OpCli:
+	case OpSti:
+	case OpHlt:
+	case OpWait:
+	case OpEsc:
+	case OpLock:
+	}
+	cpu.RegisterFile[RegIP] += uint16(inst.size)
+	return nil
+}
+
+func emulate(text, data []byte, debug bool) error {
 	cpu := &CPU{
 		Memory: RAM{
 			Text: text,
 			Data: data,
 		},
 	}
+	if debug {
+		fmt.Println(" AX   BX   CX   DX   SP   BP   SI   DI  FLAGS IP")
+	}
 	for {
 		src := cpu.Fetch()
-		inst, err := decode(src)
+		inst, err := cpu.Decode(src)
 		if err != nil {
 			return err
 		}
-		switch inst.operation {
-		default:
-			fallthrough
-		case OpInvalid:
-			must(false, fmt.Errorf("invalid operation"))
-		case OpMovRegRm:
-		case OpMovRmImm:
-		case OpMovRegImm:
-		case OpMovAccMem:
-		case OpMovMemAcc:
-		case OpMovRmSeg:
-		case OpPushRm:
-		case OpPushReg:
-		case OpPushSeg:
-		case OpPopRm:
-		case OpPopReg:
-		case OpPopSeg:
-		case OpXchgRmReg:
-		case OpXchgAccReg:
-		case OpInFixedPort:
-		case OpInVarPort:
-		case OpOutFixedPort:
-		case OpOutVarPort:
-		case OpXLAT:
-		case OpLEA:
-		case OpLDS:
-		case OpLES:
-		case OpLAHF:
-		case OpSAHF:
-		case OpPUSHF:
-		case OpPOPF:
-		case OpAddRegRm:
-		case OpAddRmImm:
-		case OpAddAccImm:
-		case OpAdcRegRm:
-		case OpAdcRmImm:
-		case OpAdcAccImm:
-		case OpIncRm:
-		case OpIncReg:
-		case OpAAA:
-		case OpBAA:
-		case OpSubRegRm:
-		case OpSubRmImm:
-		case OpSubAccImm:
-		case OpSsbRegRm:
-		case OpSsbRmImm:
-		case OpSsbAccImm:
-		case OpDecRm:
-		case OpDecReg:
-		case OpNeg:
-		case OpCmpRegRm:
-		case OpCmpRmImm:
-		case OpCmpAccImm:
-		case OpAAS:
-		case OpDAS:
-		case OpMul:
-		case OpImul:
-		case OpAAM:
-		case OpDiv:
-		case OpIdiv:
-		case OpAAD:
-		case OpCBW:
-		case OpCWD:
-		case OpNot:
-		case OpShlSal:
-		case OpShr:
-		case OpSar:
-		case OpRol:
-		case OpRor:
-		case OpRcl:
-		case OpRcr:
-		case OpAndRegRm:
-		case OpAndRmImm:
-		case OpAndAccImm:
-		case OpTestRegRm:
-		case OpTestRmImm:
-		case OpTestAccImm:
-		case OpOrRegRm:
-		case OpOrRmImm:
-		case OpOrAccImm:
-		case OpXorRegRm:
-		case OpXorRmImm:
-		case OpXorAccImm:
-		case OpRep:
-		case OpMovsb:
-		case OpCmpsb:
-		case OpScasb:
-		case OpLodsb:
-		case OpStosb:
-		case OpMovsw:
-		case OpCmpsw:
-		case OpScasw:
-		case OpLodsw:
-		case OpStosw:
-		case OpCallDirSeg:
-		case OpCallIndirSeg:
-		case OpCallDirInterSeg:
-		case OpCallIndirInterSeg:
-		case OpJmpDirSeg:
-		case OpJmpShortDirSeg:
-		case OpJmpIndirSeg:
-		case OpJmpDirInterSeg:
-		case OpJmpIndirInterSeg:
-		case OpRetSeg:
-		case OpRetSegImm:
-		case OpRetInterSeg:
-		case OpRetInterSegImm:
-		case OpJe:
-		case OpJl:
-		case OpJle:
-		case OpJb:
-		case OpJbe:
-		case OpJp:
-		case OpJo:
-		case OpJs:
-		case OpJne:
-		case OpJnl:
-		case OpJnle:
-		case OpJnb:
-		case OpJnbe:
-		case OpJnp:
-		case OpJno:
-		case OpJns:
-		case OpLoop:
-		case OpLoopz:
-		case OpLoopnz:
-		case OpJcxz:
-		case OpIntType3:
-		case OpIntTypeSpecified:
-		case OpInto:
-		case OpIret:
-		case OpClc:
-		case OpCmc:
-		case OpStc:
-		case OpCld:
-		case OpStd:
-		case OpCli:
-		case OpSti:
-		case OpHlt:
-		case OpWait:
-		case OpEsc:
-		case OpLock:
+		if debug {
+			fmt.Printf("%s:%s\n", cpu, inst)
 		}
-		cpu.Register.IP += uint16(inst.size)
+		if err := cpu.Step(inst); err != nil {
+			return err
+		}
 	}
 }
 
@@ -1561,10 +1666,10 @@ func main() {
 			log.Println(err)
 		}
 		for _, inst := range insts {
-			fmt.Println(inst)
+			fmt.Println(InstructionStringWithOffset{inst})
 		}
 	} else {
-		err := emulate(text, data)
+		err := emulate(text, data, *m)
 		if err != nil {
 			log.Println(err)
 		}
