@@ -107,6 +107,7 @@ const (
 	RegDI
 	RegFLAGS
 	RegIP
+	RegLast = RegIP
 	RegAH = RegSP
 	RegCH = RegBP
 	RegDH = RegSI
@@ -1388,9 +1389,48 @@ func (s Segment) Set(cpu *CPU, val uint16) {
 	cpu.RegisterFile[s.name] = val
 }
 
-func (m Memory) Get(cpu *CPU) (val uint16) {
-	panic("not yet implemented")
-	return 0
+func (mem Memory) Get(cpu *CPU) (val uint16) {
+	type BaseOffset struct {
+		Base, Offset byte
+	}
+	const RegInv = RegLast + 1
+	names := []BaseOffset{
+		{RegB,  RegSI},
+		{RegB,  RegDI},
+		{RegBP, RegSI},
+		{RegBP, RegDI},
+		{RegSI, RegInv},
+		{RegDI, RegInv},
+		{RegBP, RegInv},
+		{RegB,  RegInv},
+	}
+	resolve := func(bo BaseOffset) int16 {
+		base := int16(cpu.RegisterFile[bo.Base])
+		offset := int16(0)
+		if bo.Offset <= RegLast {
+			offset = int16(cpu.RegisterFile[bo.Offset])
+		}
+		return base + offset
+	}
+	switch mem.mod {
+	default:
+		panic("invalid mod")
+	case 0b00:
+		if mem.rm == 0b110 {
+			addr := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
+			return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
+		}
+		addr := resolve(names[mem.rm])
+		return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
+	case 0b01:
+		disp := int16(int8(mem.dispLow))
+		addr := resolve(names[mem.rm])+disp
+		return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
+	case 0b10:
+		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
+		addr := resolve(names[mem.rm])+disp
+		return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
+	}
 }
 
 func (m Memory) Set(cpu *CPU, val uint16) {
@@ -1458,12 +1498,10 @@ func (cpu *CPU) Step(inst Instruction) error {
 		fallthrough
 	case OpInvalid:
 		must(false, fmt.Errorf("invalid operation"))
-	case OpMovRegRm:
-	case OpMovRmImm:
-	case OpMovRegImm:
-	case OpMovAccMem:
-	case OpMovMemAcc:
-	case OpMovRmSeg:
+	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
+		dst := inst.operands[0].(Setter)
+		src := inst.operands[1].(Getter)
+		dst.Set(cpu, src.Get(cpu))
 	case OpPushRm:
 	case OpPushReg:
 	case OpPushSeg:
