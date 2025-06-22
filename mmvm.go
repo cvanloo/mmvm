@@ -18,10 +18,11 @@ import (
 type (
 	// a.out header (format of executable files)
 	// defined in Minix2:SYS/include/a.out.h
+	// and read in Minix2:SYS/src/mm/exec.c
 	Exec struct {
 		MidMag struct {
 			Magic   [2]byte // needs to be 0x01 0x03
-			Flags   byte
+			Flags   byte    // 0x20 -> separate I/D (instruction/text and data)
 			CPU     byte
 			HdrLen  uint8
 			Unused  byte
@@ -1359,7 +1360,7 @@ type (
 		Memory RAM
 	}
 	RAM struct {
-		Text, Data []byte
+		Text, Data [1<<32]byte
 	}
 	Getter interface {
 		W() byte
@@ -1573,7 +1574,7 @@ func (cpu *CPU) String() string {
 
 func (cpu *CPU) Fetch() *Source {
 	return &Source{
-		Text: cpu.Memory.Text,
+		Text: cpu.Memory.Text[:],
 		Consumed: int(cpu.RegisterFile[RegIP]),
 		Pos: int(cpu.RegisterFile[RegIP]),
 	}
@@ -1581,6 +1582,13 @@ func (cpu *CPU) Fetch() *Source {
 
 func (cpu *CPU) Decode(src *Source) (Instruction, error) {
 	return decode(src)
+}
+
+func set(b bool) uint16 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func (cpu *CPU) Step(inst Instruction) (err error) {
@@ -1680,7 +1688,15 @@ func (cpu *CPU) Step(inst Instruction) (err error) {
 		dst := inst.operands[0].(GetterSetter)
 		src := inst.operands[1].(Getter)
 		err = errors.Join(combine(dst, src, func(l, r uint16) uint16 {
-			return l ^ r
+			o := l ^ r
+			//                                   1
+			//                              5432109876543210
+			//                              XXXXODITSZXAXPXC
+			cpu.RegisterFile[RegFLAGS] &= 0b1111011111111110 // clear OF and CF
+			cpu.RegisterFile[RegFLAGS] = (cpu.RegisterFile[RegFLAGS] & ^(uint16(1) << 6)) | (set(o == 0) << 6) // set ZF
+			cpu.RegisterFile[RegFLAGS] = (cpu.RegisterFile[RegFLAGS] & ^(uint16(1) << 7)) | ((o >> 15) << 7) // set SF
+			//cpu.RegisterFile[RegFLAGS] = (cpu.RegisterFile[RegFLAGS] & ^(uint16(1) << 2)) | (set(o == 0) << 2) // set PF
+			return o
 		}))
 	case OpRep:
 	case OpMovsb:
@@ -1746,18 +1762,20 @@ func (cpu *CPU) Step(inst Instruction) (err error) {
 	return err
 }
 
-func emulate(text, data []byte, debug bool) error {
-	cpu := &CPU{
-		Memory: RAM{
-			Text: text,
-			Data: data,
-		},
-	}
+func emulate(exec Exec, bin []byte, debug bool) error {
+	cpu := &CPU{}
+	// @todo: flags = 0x20 for separate text/data
+	text := exec.Text(bin)
+	data := exec.Data(bin)
+	copy(cpu.Memory.Text[:], text)
+	copy(cpu.Memory.Data[:], data)
+	cpu.RegisterFile[RegIP] = uint16(exec.EntryPoint)
 	cpu.RegisterFile[RegSP] = 0xFFCE
 	if debug {
 		fmt.Println(" AX   BX   CX   DX   SP   BP   SI   DI  FLAGS IP")
 	}
-	for {
+	//for {
+	for range 10 {
 		src := cpu.Fetch()
 		inst, err := cpu.Decode(src)
 		if err != nil {
@@ -1770,6 +1788,7 @@ func emulate(text, data []byte, debug bool) error {
 			return err
 		}
 	}
+	return fmt.Errorf("halted and on fire")
 }
 
 func must[T any](t T, err error) T {
@@ -1802,10 +1821,9 @@ func main() {
 	if exec.BadMag() {
 		log.Fatal("bad magic")
 	}
-	text := exec.Text(bin)
-	data := exec.Data(bin)
 
 	if *d {
+		text := exec.Text(bin)
 		insts, err := disassemble(text)
 		if err != nil {
 			//log.Fatal(err)
@@ -1815,7 +1833,8 @@ func main() {
 			fmt.Println(InstructionStringWithOffset{inst})
 		}
 	} else {
-		err := emulate(text, data, *m)
+		// @todo: how to setup stack, data, etc?
+		err := emulate(exec, bin, *m)
 		if err != nil {
 			log.Println(err)
 		}
