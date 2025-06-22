@@ -58,7 +58,7 @@ type (
 	}
 	// Relative
 	Memory struct {
-		mod, rm, dispHigh, dispLow byte
+		width, mod, rm, dispHigh, dispLow byte
 	}
 	// Absolute
 	Address struct {
@@ -744,15 +744,15 @@ func decodeModRegRm(src *Source, width byte) (oreg, orm Operand) {
 	switch mod {
 	case 0b00:
 		if rm == 0b110 {
-			orm = Memory{mod: mod, rm: rm, dispLow: src.Next(), dispHigh: src.Next()}
+			orm = Memory{width: width, mod: mod, rm: rm, dispLow: src.Next(), dispHigh: src.Next()}
 		} else {
-			orm = Memory{mod: mod, rm: rm}
+			orm = Memory{width: width, mod: mod, rm: rm}
 		}
 	case 0b01:
-		orm = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: src.Next()}
+		orm = Memory{width: width, mod: mod, rm: rm, dispHigh: 0, dispLow: src.Next()}
 	case 0b10:
 		// @fixme: will this code execute in the right order?
-		orm = Memory{mod: mod, rm: rm, dispLow: src.Next(), dispHigh: src.Next()}
+		orm = Memory{width: width, mod: mod, rm: rm, dispLow: src.Next(), dispHigh: src.Next()}
 	case 0b11:
 		orm = Register{name: rm, width: width}
 	}
@@ -769,15 +769,15 @@ func decodeModSegRm(src *Source, width byte) (oreg, orm Operand) {
 	switch mod {
 	case 0b00:
 		if rm == 0b110 {
-			orm = Memory{mod: mod, rm: rm, dispLow: src.Next(), dispHigh: src.Next()}
+			orm = Memory{width: width, mod: mod, rm: rm, dispLow: src.Next(), dispHigh: src.Next()}
 		} else {
-			orm = Memory{mod: mod, rm: rm}
+			orm = Memory{width: width, mod: mod, rm: rm}
 		}
 	case 0b01:
-		orm = Memory{mod: mod, rm: rm, dispHigh: 0, dispLow: src.Next()}
+		orm = Memory{width: width, mod: mod, rm: rm, dispHigh: 0, dispLow: src.Next()}
 	case 0b10:
 		// @fixme: will this code execute in the right order?
-		orm = Memory{mod: mod, rm: rm, dispLow: src.Next(), dispHigh: src.Next()}
+		orm = Memory{width: width, mod: mod, rm: rm, dispLow: src.Next(), dispHigh: src.Next()}
 	case 0b11:
 		orm = Register{name: rm, width: width}
 	}
@@ -1362,10 +1362,14 @@ type (
 		Text, Data []byte
 	}
 	Getter interface {
-		Get(cpu *CPU) (val uint16)
+		W() byte
+		GetB(cpu *CPU) (val uint8)
+		GetW(cpu *CPU) (val uint16)
 	}
 	Setter interface {
-		Set(cpu *CPU, val uint16)
+		W() byte
+		SetB(cpu *CPU, val uint8)
+		SetW(cpu *CPU, val uint16)
 	}
 	GetterSetter interface {
 		Getter
@@ -1373,27 +1377,31 @@ type (
 	}
 )
 
-func (r Register) Get(cpu *CPU) (val uint16) {
+func (r Register) W() byte {
+	return r.width
+}
+
+func (r Register) GetB(cpu *CPU) (val uint8) {
+	return uint8(cpu.RegisterFile[r.name])
+}
+
+func (r Register) GetW(cpu *CPU) (val uint16) {
 	return cpu.RegisterFile[r.name]
 }
 
-func (r Register) Set(cpu *CPU, val uint16) {
+func (r Register) SetB(cpu *CPU, val uint8) {
+	cpu.RegisterFile[r.name] = uint16(val)
+}
+
+func (r Register) SetW(cpu *CPU, val uint16) {
 	cpu.RegisterFile[r.name] = val
 }
 
-func (s Segment) Get(cpu *CPU) (val uint16) {
-	return cpu.RegisterFile[s.name]
-}
-
-func (s Segment) Set(cpu *CPU, val uint16) {
-	cpu.RegisterFile[s.name] = val
-}
-
-func (mem Memory) Get(cpu *CPU) (val uint16) {
+func BaseOffset(cpu *CPU, i byte, disp int16) uint16 {
+	const RegInv = RegLast + 1
 	type BaseOffset struct {
 		Base, Offset byte
 	}
-	const RegInv = RegLast + 1
 	names := []BaseOffset{
 		{RegB,  RegSI},
 		{RegB,  RegDI},
@@ -1404,14 +1412,42 @@ func (mem Memory) Get(cpu *CPU) (val uint16) {
 		{RegBP, RegInv},
 		{RegB,  RegInv},
 	}
-	resolve := func(bo BaseOffset) int16 {
-		base := int16(cpu.RegisterFile[bo.Base])
-		offset := int16(0)
-		if bo.Offset <= RegLast {
-			offset = int16(cpu.RegisterFile[bo.Offset])
-		}
-		return base + offset
+	bo := names[i]
+	base := int16(cpu.RegisterFile[bo.Base])
+	offset := int16(0)
+	if bo.Offset <= RegLast {
+		offset = int16(cpu.RegisterFile[bo.Offset])
 	}
+	return uint16(base+offset+disp)
+}
+
+func (mem Memory) W() byte {
+	return mem.width
+}
+
+func (mem Memory) GetB(cpu *CPU) (val uint8) {
+	switch mem.mod {
+	default:
+		panic("invalid mod")
+	case 0b00:
+		if mem.rm == 0b110 {
+			addr := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
+			return cpu.Memory.Data[addr]
+		}
+		addr := BaseOffset(cpu, mem.rm, 0)
+		return cpu.Memory.Data[addr]
+	case 0b01:
+		disp := int16(int8(mem.dispLow))
+		addr := BaseOffset(cpu, mem.rm, disp)
+		return cpu.Memory.Data[addr]
+	case 0b10:
+		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
+		addr := BaseOffset(cpu, mem.rm, disp)
+		return cpu.Memory.Data[addr]
+	}
+}
+
+func (mem Memory) GetW(cpu *CPU) (val uint16) {
 	switch mem.mod {
 	default:
 		panic("invalid mod")
@@ -1420,28 +1456,83 @@ func (mem Memory) Get(cpu *CPU) (val uint16) {
 			addr := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
 			return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
 		}
-		addr := resolve(names[mem.rm])
+		addr := BaseOffset(cpu, mem.rm, 0)
 		return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
 	case 0b01:
 		disp := int16(int8(mem.dispLow))
-		addr := resolve(names[mem.rm])+disp
+		addr := BaseOffset(cpu, mem.rm, disp)
 		return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
 	case 0b10:
 		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
-		addr := resolve(names[mem.rm])+disp
+		addr := BaseOffset(cpu, mem.rm, disp)
 		return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
 	}
 }
 
-func (m Memory) Set(cpu *CPU, val uint16) {
-	panic("not yet implemented")
+func (mem Memory) SetB(cpu *CPU, val uint8) {
+	var addr uint16
+	switch mem.mod {
+	default:
+		panic("invalid mod")
+	case 0b00:
+		if mem.rm == 0b110 {
+			addr = (uint16(mem.dispHigh) << 8) ^ uint16(mem.dispLow)
+		} else {
+			addr = BaseOffset(cpu, mem.rm, 0)
+		}
+	case 0b01:
+		disp := int16(int8(mem.dispLow))
+		addr = BaseOffset(cpu, mem.rm, disp)
+	case 0b10:
+		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
+		addr = BaseOffset(cpu, mem.rm, disp)
+	}
+	cpu.Memory.Data[addr] = val
 }
 
-func (i Immediate) Get(cpu *CPU) (val uint16) {
+func (mem Memory) SetW(cpu *CPU, val uint16) {
+	var addr uint16
+	switch mem.mod {
+	default:
+		panic("invalid mod")
+	case 0b00:
+		if mem.rm == 0b110 {
+			addr = (uint16(mem.dispHigh) << 8) ^ uint16(mem.dispLow)
+		} else {
+			addr = BaseOffset(cpu, mem.rm, 0)
+		}
+	case 0b01:
+		disp := int16(int8(mem.dispLow))
+		addr = BaseOffset(cpu, mem.rm, disp)
+	case 0b10:
+		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
+		addr = BaseOffset(cpu, mem.rm, disp)
+	}
+	cpu.Memory.Data[addr] = byte(val >> 8)
+	cpu.Memory.Data[addr+1] = byte(val)
+}
+
+func (i Immediate) W() byte {
+	return i.width
+}
+
+func (i Immediate) GetB(cpu *CPU) (val uint8) {
+	return uint8(i.value)
+}
+
+func (i Immediate) GetW(cpu *CPU) (val uint16) {
 	return i.value
 }
 
-func (i SignedImmediate) Get(cpu *CPU) (val uint16) {
+func (i SignedImmediate) W() byte {
+	return i.width
+}
+
+func (i SignedImmediate) GetB(cpu *CPU) (val uint8) {
+	return uint8(i.value)
+}
+
+func (i SignedImmediate) GetW(cpu *CPU) (val uint16) {
 	return uint16(i.value)
 }
 
@@ -1473,10 +1564,10 @@ func (cpu *CPU) String() string {
 	}
 	return fmt.Sprintf(
 		"%04x %04x %04x %04x %04x %04x %04x %04x %s %04x", 
-		cpu.RegisterFile[0], cpu.RegisterFile[1], cpu.RegisterFile[2],
-		cpu.RegisterFile[3], cpu.RegisterFile[4], cpu.RegisterFile[5],
-		cpu.RegisterFile[6], cpu.RegisterFile[7], flags(cpu.RegisterFile[8]),
-		cpu.RegisterFile[9],
+		cpu.RegisterFile[RegA], cpu.RegisterFile[RegB], cpu.RegisterFile[RegC],
+		cpu.RegisterFile[RegD], cpu.RegisterFile[RegSP], cpu.RegisterFile[RegBP],
+		cpu.RegisterFile[RegSI], cpu.RegisterFile[RegDI],
+		flags(cpu.RegisterFile[RegFLAGS]), cpu.RegisterFile[RegIP],
 	)
 }
 
@@ -1492,16 +1583,30 @@ func (cpu *CPU) Decode(src *Source) (Instruction, error) {
 	return decode(src)
 }
 
-func (cpu *CPU) Step(inst Instruction) error {
+func (cpu *CPU) Step(inst Instruction) (err error) {
+	combine := func(l GetterSetter, r Getter, op func(l, r uint16) uint16) error {
+		w := l.W() + r.W()
+		switch w {
+		default:
+			return fmt.Errorf("cannot operate on operands of differing sizes")
+		case 0:
+			l.SetB(cpu, uint8(op(uint16(l.GetB(cpu)), uint16(r.GetB(cpu)))))
+		case 2:
+			l.SetW(cpu, op(l.GetW(cpu), r.GetW(cpu)))
+		}
+		return nil
+	}
 	switch inst.operation {
 	default:
 		fallthrough
 	case OpInvalid:
 		must(false, fmt.Errorf("invalid operation"))
 	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
-		dst := inst.operands[0].(Setter)
+		dst := inst.operands[0].(GetterSetter)
 		src := inst.operands[1].(Getter)
-		dst.Set(cpu, src.Get(cpu))
+		err = errors.Join(err, combine(dst, src, func(_, r uint16) uint16 {
+			return r
+		}))
 	case OpPushRm:
 	case OpPushReg:
 	case OpPushSeg:
@@ -1574,7 +1679,9 @@ func (cpu *CPU) Step(inst Instruction) error {
 	case OpXorRegRm, OpXorRmImm, OpXorAccImm:
 		dst := inst.operands[0].(GetterSetter)
 		src := inst.operands[1].(Getter)
-		dst.Set(cpu, dst.Get(cpu) ^ src.Get(cpu))
+		err = errors.Join(combine(dst, src, func(l, r uint16) uint16 {
+			return l ^ r
+		}))
 	case OpRep:
 	case OpMovsb:
 	case OpCmpsb:
@@ -1636,7 +1743,7 @@ func (cpu *CPU) Step(inst Instruction) error {
 	case OpLock:
 	}
 	cpu.RegisterFile[RegIP] += uint16(inst.size)
-	return nil
+	return err
 }
 
 func emulate(text, data []byte, debug bool) error {
@@ -1646,6 +1753,7 @@ func emulate(text, data []byte, debug bool) error {
 			Data: data,
 		},
 	}
+	cpu.RegisterFile[RegSP] = 0xFFCE
 	if debug {
 		fmt.Println(" AX   BX   CX   DX   SP   BP   SI   DI  FLAGS IP")
 	}
