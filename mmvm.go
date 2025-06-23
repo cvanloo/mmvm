@@ -1660,7 +1660,8 @@ func (cpu *CPU) Step(inst Instruction) (err error) {
 		default:
 			return fmt.Errorf("cannot operate on operands of differing sizes")
 		case 0:
-			l.SetB(cpu, uint8(op(uint16(l.GetB(cpu)), uint16(r.GetB(cpu)))))
+			//l.SetB(cpu, uint8(op(uint16(int8(l.GetB(cpu))), uint16(int8(r.GetB(cpu))))))
+			l.SetB(cpu, uint8(int8(op(uint16(int8(l.GetB(cpu))), uint16(int8(r.GetB(cpu)))))))
 		case 2:
 			l.SetW(cpu, op(l.GetW(cpu), r.GetW(cpu)))
 		}
