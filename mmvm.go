@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"log"
 	"flag"
+	"math"
+	"math/bits"
 )
 
 // @todo: https://www.muppetlabs.com/~breadbox/txt/mopb.html
@@ -1359,6 +1361,9 @@ type (
 		RegisterFile [10]uint16
 		Memory RAM
 	}
+	Flags struct {
+		reg *uint16
+	}
 	RAM struct {
 		Text, Data [1<<32]byte
 	}
@@ -1377,6 +1382,70 @@ type (
 		Setter
 	}
 )
+
+func (f Flags) Set(i, s uint16) Flags {
+	v := *f.reg
+	*f.reg = (v & ^(uint16(1) << i)) | (s << i)
+	return f
+}
+
+func (f Flags) CF(a, b uint16) Flags {
+	if uint32(a) + uint32(b) > math.MaxUint16 {
+		return f.Set(0, 1)
+	}
+	return f.Set(0, 0)
+}
+
+func (f Flags) PF(r uint16) Flags {
+	// @note: https://en.wikipedia.org/wiki/Parity_flag#x86_processors
+	//   parity flag only considers LSB
+	if bits.OnesCount8(uint8(r)) % 2 == 0 {
+		return f.Set(2, 1)
+	}
+	return f.Set(2, 0)
+}
+
+func (f Flags) AF(a, b, r uint16) Flags {
+	// @note: https://en.wikipedia.org/wiki/Half-carry_flag#The_Auxiliary_Carry_Flag_in_x86
+	//   check if a carry over happens from bit 3 to bit 4 (from lowest nibble to next nibble)
+	if ((a ^ b ^ r) & 0x10) != 0 {
+		return f.Set(4, 1)
+	}
+	return f.Set(4, 0)
+}
+
+func (f Flags) ZF(r uint16) Flags {
+	if r == 0 {
+		return f.Set(6, 1)
+	}
+	return f.Set(6, 0)
+}
+
+func (f Flags) SF(r uint16) Flags {
+	if (r >> 15) == 1 {
+		return f.Set(7, 1)
+	}
+	return f.Set(7, 0)
+}
+
+func (f Flags) TF(s uint16) Flags {
+	return f.Set(8, s)
+}
+
+func (f Flags) IF(s uint16) Flags {
+	return f.Set(9, s)
+}
+
+func (f Flags) DF(s uint16) Flags {
+	return f.Set(10, s)
+}
+
+func (f Flags) OF(a, b, r uint16) Flags {
+	if (a >> 15) == (b >> 15) && (a >> 15) != (b >> 15) {
+		return f.Set(11, 1)
+	}
+	return f.Set(11, 0)
+}
 
 func (r Register) W() byte {
 	return r.width
@@ -1584,13 +1653,6 @@ func (cpu *CPU) Decode(src *Source) (Instruction, error) {
 	return decode(src)
 }
 
-func set(b bool) uint16 {
-	if b {
-		return 1
-	}
-	return 0
-}
-
 func (cpu *CPU) Step(inst Instruction) (err error) {
 	combine := func(l GetterSetter, r Getter, op func(l, r uint16) uint16) error {
 		w := l.W() + r.W()
@@ -1689,13 +1751,7 @@ func (cpu *CPU) Step(inst Instruction) (err error) {
 		src := inst.operands[1].(Getter)
 		err = errors.Join(combine(dst, src, func(l, r uint16) uint16 {
 			o := l ^ r
-			//                                   1
-			//                              5432109876543210
-			//                              XXXXODITSZXAXPXC
-			cpu.RegisterFile[RegFLAGS] &= 0b1111011111111110 // clear OF and CF
-			cpu.RegisterFile[RegFLAGS] = (cpu.RegisterFile[RegFLAGS] & ^(uint16(1) << 6)) | (set(o == 0) << 6) // set ZF
-			cpu.RegisterFile[RegFLAGS] = (cpu.RegisterFile[RegFLAGS] & ^(uint16(1) << 7)) | ((o >> 15) << 7) // set SF
-			//cpu.RegisterFile[RegFLAGS] = (cpu.RegisterFile[RegFLAGS] & ^(uint16(1) << 2)) | (set(o == 0) << 2) // set PF
+			Flags{&cpu.RegisterFile[RegFLAGS]}.OF(0, 0, 0).CF(0, 0).ZF(o).SF(o).PF(o)
 			return o
 		}))
 	case OpRep:
