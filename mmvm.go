@@ -1774,6 +1774,13 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpDecRm, OpDecReg:
 	case OpNeg:
 	case OpCmpRegRm, OpCmpRmImm, OpCmpAccImm:
+		s1 := inst.operands[0].(Getter)
+		s2 := inst.operands[1].(Getter)
+		check(s1, s2)
+		a := s1.Get(cpu)
+		b := s2.Get(cpu)
+		r := a - b
+		cpu.Flags().CF(a, b).OF(a, b, r).SF(r).ZF(r).AF(a, b, r).PF(r)
 	case OpAAS:
 	case OpDAS:
 	case OpMul:
