@@ -1635,7 +1635,7 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpInvalid:
 		must(false, ErrIllegalInstruction)
 	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
-		dst := inst.operands[0].(GetterSetter)
+		dst := inst.operands[0].(Setter)
 		src := inst.operands[1].(Getter)
 		dst.Set(cpu, src.Get(cpu))
 	case OpPushRm:
@@ -1652,6 +1652,9 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpOutVarPort:
 	case OpXLAT:
 	case OpLEA:
+		dst := inst.operands[0].(Setter)
+		mem := inst.operands[1].(Memory)
+		dst.Set(cpu, mem.Addr(cpu))
 	case OpLDS:
 	case OpLES:
 	case OpLAHF:
