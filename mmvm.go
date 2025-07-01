@@ -1823,6 +1823,10 @@ var d = flag.Bool("d", false, "disassemble")
 var m = flag.Bool("m", false, "debug")
 
 func init() {
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [-d|-m] a.out\n", os.Args[0])
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 }
 
