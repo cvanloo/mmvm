@@ -65,12 +65,12 @@ type (
 		width, mod, rm, dispHigh, dispLow byte
 	}
 	// Absolute
-	Address struct {
+	Address struct { // @todo: do we really need this?
 		width byte
 		addr int16
 	}
 	// Segment:Offset
-	SegmentOffset struct {
+	SegmentOffset struct { // @todo: where do we need this?
 		segment, offset int16
 	}
 	Immediate struct {
@@ -111,11 +111,11 @@ const (
 	RegDI
 	RegFLAGS
 	RegIP
-	RegLast = RegIP
 	RegAH = RegSP
 	RegCH = RegBP
 	RegDH = RegSI
 	RegBH = RegDI
+	RegLast = RegIP
 )
 
 const (
@@ -1463,6 +1463,10 @@ func (f Flags) OF(a, b, r uint16) Flags {
 	return f.Set(11, 0)
 }
 
+func (r Register) W() byte {
+	return r.width
+}
+
 func (r Register) Get(cpu *CPU) (val uint16) {
 	switch r.width {
 	default:
@@ -1527,6 +1531,10 @@ func (mem Memory) Addr(cpu *CPU) uint16 {
 	}
 }
 
+func (mem Memory) W() byte {
+	return mem.width
+}
+
 func (mem Memory) Get(cpu *CPU) (val uint16) {
 	switch mem.width {
 	default:
@@ -1554,6 +1562,10 @@ func (mem Memory) Set(cpu *CPU, val uint16) {
 	}
 }
 
+func (i Immediate) W() byte {
+	return i.width
+}
+
 func (i Immediate) Get(cpu *CPU) (val uint16) {
 	switch i.width {
 	default:
@@ -1563,6 +1575,10 @@ func (i Immediate) Get(cpu *CPU) (val uint16) {
 	case 1:
 		return i.value
 	}
+}
+
+func (i SignedImmediate) W() byte {
+	return i.width
 }
 
 func (i SignedImmediate) Get(cpu *CPU) (val uint16) {
@@ -1629,6 +1645,11 @@ var (
 )
 
 func (cpu *CPU) Step(inst Instruction) {
+	check := func(o1, o2 any) {
+		wo1 := o1.(interface{W() byte})
+		wo2 := o2.(interface{W() byte})
+		must(wo1 == wo2, ErrOperandWidthMismatch)
+	}
 	switch inst.operation {
 	default:
 		fallthrough
@@ -1637,15 +1658,11 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
 		dst := inst.operands[0].(Setter)
 		src := inst.operands[1].(Getter)
+		check(dst, src)
 		dst.Set(cpu, src.Get(cpu))
-	case OpPushRm:
-	case OpPushReg:
-	case OpPushSeg:
-	case OpPopRm:
-	case OpPopReg:
-	case OpPopSeg:
-	case OpXchgRmReg:
-	case OpXchgAccReg:
+	case OpPushRm, OpPushReg, OpPushSeg:
+	case OpPopRm, OpPopReg, OpPopSeg:
+	case OpXchgRmReg, OpXchgAccReg:
 	case OpInFixedPort:
 	case OpInVarPort:
 	case OpOutFixedPort:
@@ -1654,35 +1671,37 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpLEA:
 		dst := inst.operands[0].(Setter)
 		mem := inst.operands[1].(Memory)
+		check(dst, mem)
 		dst.Set(cpu, mem.Addr(cpu))
+		// @todo: Behavior/FLAGS
 	case OpLDS:
 	case OpLES:
 	case OpLAHF:
 	case OpSAHF:
 	case OpPUSHF:
 	case OpPOPF:
-	case OpAddRegRm:
-	case OpAddRmImm:
-	case OpAddAccImm:
-	case OpAdcRegRm:
-	case OpAdcRmImm:
-	case OpAdcAccImm:
-	case OpIncRm:
-	case OpIncReg:
+	case OpAddRegRm, OpAddRmImm, OpAddAccImm:
+		dst := inst.operands[0].(GetterSetter)
+		src := inst.operands[1].(Getter)
+		check(dst, src)
+		r := dst.Get(cpu) + src.Get(cpu)
+		dst.Set(cpu, r)
+		// @todo: Behavior/FLAGS
+	case OpAdcRegRm, OpAdcRmImm, OpAdcAccImm:
+		dst := inst.operands[0].(GetterSetter)
+		src := inst.operands[1].(Getter)
+		check(dst, src)
+		r := dst.Get(cpu) + src.Get(cpu)
+		dst.Set(cpu, r)
+		// @todo: Behavior/FLAGS
+	case OpIncRm, OpIncReg:
 	case OpAAA:
 	case OpBAA:
-	case OpSubRegRm:
-	case OpSubRmImm:
-	case OpSubAccImm:
-	case OpSsbRegRm:
-	case OpSsbRmImm:
-	case OpSsbAccImm:
-	case OpDecRm:
-	case OpDecReg:
+	case OpSubRegRm, OpSubRmImm, OpSubAccImm:
+	case OpSsbRegRm, OpSsbRmImm, OpSsbAccImm:
+	case OpDecRm, OpDecReg:
 	case OpNeg:
-	case OpCmpRegRm:
-	case OpCmpRmImm:
-	case OpCmpAccImm:
+	case OpCmpRegRm, OpCmpRmImm, OpCmpAccImm:
 	case OpAAS:
 	case OpDAS:
 	case OpMul:
@@ -1701,18 +1720,13 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpRor:
 	case OpRcl:
 	case OpRcr:
-	case OpAndRegRm:
-	case OpAndRmImm:
-	case OpAndAccImm:
-	case OpTestRegRm:
-	case OpTestRmImm:
-	case OpTestAccImm:
-	case OpOrRegRm:
-	case OpOrRmImm:
-	case OpOrAccImm:
+	case OpAndRegRm, OpAndRmImm, OpAndAccImm:
+	case OpTestRegRm, OpTestRmImm, OpTestAccImm:
+	case OpOrRegRm, OpOrRmImm, OpOrAccImm:
 	case OpXorRegRm, OpXorRmImm, OpXorAccImm:
 		dst := inst.operands[0].(GetterSetter)
 		src := inst.operands[1].(Getter)
+		check(dst, src)
 		r := dst.Get(cpu) ^ src.Get(cpu)
 		dst.Set(cpu, r)
 		Flags{&cpu.RegisterFile[RegFLAGS]}.OF(0, 0, 0).CF(0, 0).ZF(r).SF(r).PF(r)
