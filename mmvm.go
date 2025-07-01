@@ -586,12 +586,31 @@ func (inst Instruction) String() string {
 	}
 }
 
-type InstructionStringWithOffset struct {
-	Instruction
-}
+type (
+	InstructionStringWithOffset struct {
+		Instruction
+	}
+	InstructionStringWithMemoryAccess struct {
+		inst Instruction
+		cpu *CPU
+	}
+)
 
 func (iswo InstructionStringWithOffset) String() string {
 	return fmt.Sprintf("%04x: %s", iswo.Instruction.offset, iswo.Instruction)
+}
+
+func (iswma InstructionStringWithMemoryAccess) String() string {
+	if len(iswma.inst.operands) <= 2 {
+		for _, opnd := range iswma.inst.operands {
+			switch m := opnd.(type) {
+			case Memory:
+				return fmt.Sprintf("%s ;[%04x]%04x", iswma.inst, m.Addr(iswma.cpu), m.Get(iswma.cpu))
+			//@todo: case Address:
+			}
+		}
+	}
+	return iswma.inst.String()
 }
 
 func W(i byte) byte {
@@ -1369,14 +1388,10 @@ type (
 		Text, Data [1<<32]byte
 	}
 	Getter interface {
-		W() byte
-		GetB(cpu *CPU) (val uint8)
-		GetW(cpu *CPU) (val uint16)
+		Get(cpu *CPU) (val uint16)
 	}
 	Setter interface {
-		W() byte
-		SetB(cpu *CPU, val uint8)
-		SetW(cpu *CPU, val uint16)
+		Set(cpu *CPU, val uint16)
 	}
 	GetterSetter interface {
 		Getter
@@ -1448,24 +1463,26 @@ func (f Flags) OF(a, b, r uint16) Flags {
 	return f.Set(11, 0)
 }
 
-func (r Register) W() byte {
-	return r.width
+func (r Register) Get(cpu *CPU) (val uint16) {
+	switch r.width {
+	default:
+		panic("unreachable")
+	case 0:
+		return uint16(uint8(cpu.RegisterFile[r.name]))
+	case 1:
+		return cpu.RegisterFile[r.name]
+	}
 }
 
-func (r Register) GetB(cpu *CPU) (val uint8) {
-	return uint8(cpu.RegisterFile[r.name])
-}
-
-func (r Register) GetW(cpu *CPU) (val uint16) {
-	return cpu.RegisterFile[r.name]
-}
-
-func (r Register) SetB(cpu *CPU, val uint8) {
-	cpu.RegisterFile[r.name] = uint16(val)
-}
-
-func (r Register) SetW(cpu *CPU, val uint16) {
-	cpu.RegisterFile[r.name] = val
+func (r Register) Set(cpu *CPU, val uint16) {
+	switch r.width {
+	default:
+		panic("unreachable")
+	case 0:
+		cpu.RegisterFile[r.name] = uint16(uint8(val))
+	case 1:
+		cpu.RegisterFile[r.name] = val
+	}
 }
 
 func BaseOffset(cpu *CPU, i byte, disp int16) uint16 {
@@ -1492,119 +1509,71 @@ func BaseOffset(cpu *CPU, i byte, disp int16) uint16 {
 	return uint16(base+offset+disp)
 }
 
-func (mem Memory) W() byte {
-	return mem.width
-}
-
-func (mem Memory) GetB(cpu *CPU) (val uint8) {
+func (mem Memory) Addr(cpu *CPU) uint16 {
 	switch mem.mod {
 	default:
-		panic("invalid mod")
+		panic("unreachable")
 	case 0b00:
 		if mem.rm == 0b110 {
-			addr := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
-			return cpu.Memory.Data[addr]
+			return (uint16(mem.dispHigh) << 8) ^ uint16(mem.dispLow)
 		}
-		addr := BaseOffset(cpu, mem.rm, 0)
-		return cpu.Memory.Data[addr]
+		return BaseOffset(cpu, mem.rm, 0)
 	case 0b01:
 		disp := int16(int8(mem.dispLow))
-		addr := BaseOffset(cpu, mem.rm, disp)
-		return cpu.Memory.Data[addr]
+		return BaseOffset(cpu, mem.rm, disp)
 	case 0b10:
 		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
-		addr := BaseOffset(cpu, mem.rm, disp)
-		return cpu.Memory.Data[addr]
+		return BaseOffset(cpu, mem.rm, disp)
 	}
 }
 
-func (mem Memory) GetW(cpu *CPU) (val uint16) {
-	switch mem.mod {
+func (mem Memory) Get(cpu *CPU) (val uint16) {
+	switch mem.width {
 	default:
-		panic("invalid mod")
-	case 0b00:
-		if mem.rm == 0b110 {
-			addr := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
-			return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
-		}
-		addr := BaseOffset(cpu, mem.rm, 0)
-		return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
-	case 0b01:
-		disp := int16(int8(mem.dispLow))
-		addr := BaseOffset(cpu, mem.rm, disp)
-		return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
-	case 0b10:
-		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
-		addr := BaseOffset(cpu, mem.rm, disp)
+		panic("unreachable")
+	case 0:
+		addr := mem.Addr(cpu)
+		return uint16(cpu.Memory.Data[addr])
+	case 1:
+		addr := mem.Addr(cpu)
 		return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
 	}
 }
 
-func (mem Memory) SetB(cpu *CPU, val uint8) {
-	var addr uint16
-	switch mem.mod {
+func (mem Memory) Set(cpu *CPU, val uint16) {
+	switch mem.width {
 	default:
-		panic("invalid mod")
-	case 0b00:
-		if mem.rm == 0b110 {
-			addr = (uint16(mem.dispHigh) << 8) ^ uint16(mem.dispLow)
-		} else {
-			addr = BaseOffset(cpu, mem.rm, 0)
-		}
-	case 0b01:
-		disp := int16(int8(mem.dispLow))
-		addr = BaseOffset(cpu, mem.rm, disp)
-	case 0b10:
-		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
-		addr = BaseOffset(cpu, mem.rm, disp)
+		panic("unreachable")
+	case 0:
+		addr := mem.Addr(cpu)
+		cpu.Memory.Data[addr] = uint8(val)
+	case 1:
+		addr := mem.Addr(cpu)
+		cpu.Memory.Data[addr] = byte(val >> 8)
+		cpu.Memory.Data[addr+1] = byte(val)
 	}
-	cpu.Memory.Data[addr] = val
 }
 
-func (mem Memory) SetW(cpu *CPU, val uint16) {
-	var addr uint16
-	switch mem.mod {
+func (i Immediate) Get(cpu *CPU) (val uint16) {
+	switch i.width {
 	default:
-		panic("invalid mod")
-	case 0b00:
-		if mem.rm == 0b110 {
-			addr = (uint16(mem.dispHigh) << 8) ^ uint16(mem.dispLow)
-		} else {
-			addr = BaseOffset(cpu, mem.rm, 0)
-		}
-	case 0b01:
-		disp := int16(int8(mem.dispLow))
-		addr = BaseOffset(cpu, mem.rm, disp)
-	case 0b10:
-		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
-		addr = BaseOffset(cpu, mem.rm, disp)
+		panic("unreachable")
+	case 0:
+		return uint16(uint8(i.value))
+	case 1:
+		return i.value
 	}
-	cpu.Memory.Data[addr] = byte(val >> 8)
-	cpu.Memory.Data[addr+1] = byte(val)
 }
 
-func (i Immediate) W() byte {
-	return i.width
-}
-
-func (i Immediate) GetB(cpu *CPU) (val uint8) {
-	return uint8(i.value)
-}
-
-func (i Immediate) GetW(cpu *CPU) (val uint16) {
-	return i.value
-}
-
-func (i SignedImmediate) W() byte {
-	return i.width
-}
-
-func (i SignedImmediate) GetB(cpu *CPU) (val uint8) {
-	return uint8(i.value)
-}
-
-func (i SignedImmediate) GetW(cpu *CPU) (val uint16) {
-	return uint16(i.value)
+func (i SignedImmediate) Get(cpu *CPU) (val uint16) {
+	switch i.width {
+	default:
+		panic("unreachable")
+	case 0:
+		return uint16(uint8(i.value))
+	case 1:
+		return uint16(i.value)
+	}
 }
 
 func (cpu *CPU) String() string {
@@ -1659,7 +1628,7 @@ var (
 	ErrIllegalInstruction = errors.New("illegal instruction")
 )
 
-func (cpu *CPU) Step(inst Instruction) (err error) {
+func (cpu *CPU) Step(inst Instruction) {
 	switch inst.operation {
 	default:
 		fallthrough
@@ -1668,15 +1637,7 @@ func (cpu *CPU) Step(inst Instruction) (err error) {
 	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
 		dst := inst.operands[0].(GetterSetter)
 		src := inst.operands[1].(Getter)
-		must(dst.W() == src.W(), ErrOperandWidthMismatch)
-		switch dst.W() {
-		default:
-			must(false, fmt.Errorf("unreachable"))
-		case 0:
-			dst.SetB(cpu, src.GetB(cpu))
-		case 1:
-			dst.SetW(cpu, src.GetW(cpu))
-		}
+		dst.Set(cpu, src.Get(cpu))
 	case OpPushRm:
 	case OpPushReg:
 	case OpPushSeg:
@@ -1749,19 +1710,9 @@ func (cpu *CPU) Step(inst Instruction) (err error) {
 	case OpXorRegRm, OpXorRmImm, OpXorAccImm:
 		dst := inst.operands[0].(GetterSetter)
 		src := inst.operands[1].(Getter)
-		must(dst.W() == src.W(), ErrOperandWidthMismatch)
-		switch dst.W() {
-		default:
-			must(false, fmt.Errorf("unreachable"))
-		case 0:
-			r := dst.GetB(cpu) ^ src.GetB(cpu)
-			dst.SetB(cpu, r)
-			Flags{&cpu.RegisterFile[RegFLAGS]}.OF(0, 0, 0).CF(0, 0).ZF(r).SF(r).PF(r)
-		case 1:
-			r := dst.GetW(cpu) ^ src.GetW(cpu)
-			dst.SetW(cpu, r)
-			Flags{&cpu.RegisterFile[RegFLAGS]}.OF(0, 0, 0).CF(0, 0).ZF(r).SF(r).PF(r)
-		}
+		r := dst.Get(cpu) ^ src.Get(cpu)
+		dst.Set(cpu, r)
+		Flags{&cpu.RegisterFile[RegFLAGS]}.OF(0, 0, 0).CF(0, 0).ZF(r).SF(r).PF(r)
 	case OpRep:
 	case OpMovsb:
 	case OpCmpsb:
@@ -1823,16 +1774,20 @@ func (cpu *CPU) Step(inst Instruction) (err error) {
 	case OpLock:
 	}
 	cpu.RegisterFile[RegIP] += uint16(inst.size)
-	return err
 }
+
+var ErrHaltAndCatchFire = errors.New("halted and on fire")
 
 func emulate(exec Exec, bin []byte, debug bool) error {
 	cpu := &CPU{}
 	// @todo: flags = 0x20 for separate text/data
 	text := exec.Text(bin)
 	data := exec.Data(bin)
+	// @todo: have to allocate argv (arguments) and envp (environment)
 	copy(cpu.Memory.Text[:], text)
 	copy(cpu.Memory.Data[:], data)
+	// @todo: allocate BSS (exec.SizeBSS)
+	// @todo: allocate strings / symbols
 	cpu.RegisterFile[RegIP] = uint16(exec.EntryPoint)
 	cpu.RegisterFile[RegSP] = 0xFFCE
 	if debug {
@@ -1846,13 +1801,12 @@ func emulate(exec Exec, bin []byte, debug bool) error {
 			return err
 		}
 		if debug {
-			fmt.Printf("%s:%s\n", cpu, inst)
+			// @todo: print calculated address and read value for memory accesses
+			fmt.Printf("%s:%s\n", cpu, InstructionStringWithMemoryAccess{inst, cpu})
 		}
-		if err := cpu.Step(inst); err != nil {
-			return err
-		}
+		cpu.Step(inst)
 	}
-	return fmt.Errorf("halted and on fire")
+	return ErrHaltAndCatchFire
 }
 
 func must[T any](t T, err error) T {
