@@ -21,6 +21,7 @@ type (
 	// a.out header (format of executable files)
 	// defined in Minix2:SYS/include/a.out.h
 	// and read in Minix2:SYS/src/mm/exec.c
+	// and also relevant Minix2:SYS/src/lib/posix/_execve.c
 	Exec struct {
 		MidMag struct {
 			Magic   [2]byte // needs to be 0x01 0x03
@@ -1653,31 +1654,29 @@ func (cpu *CPU) Decode(src *Source) (Instruction, error) {
 	return decode(src)
 }
 
+var (
+	ErrOperandWidthMismatch = errors.New("operands differ in width")
+	ErrIllegalInstruction = errors.New("illegal instruction")
+)
+
 func (cpu *CPU) Step(inst Instruction) (err error) {
-	combine := func(l GetterSetter, r Getter, op func(l, r uint16) uint16) error {
-		w := l.W() + r.W()
-		switch w {
-		default:
-			return fmt.Errorf("cannot operate on operands of differing sizes")
-		case 0:
-			//l.SetB(cpu, uint8(op(uint16(int8(l.GetB(cpu))), uint16(int8(r.GetB(cpu))))))
-			l.SetB(cpu, uint8(int8(op(uint16(int8(l.GetB(cpu))), uint16(int8(r.GetB(cpu)))))))
-		case 2:
-			l.SetW(cpu, op(l.GetW(cpu), r.GetW(cpu)))
-		}
-		return nil
-	}
 	switch inst.operation {
 	default:
 		fallthrough
 	case OpInvalid:
-		must(false, fmt.Errorf("invalid operation"))
+		must(false, ErrIllegalInstruction)
 	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
 		dst := inst.operands[0].(GetterSetter)
 		src := inst.operands[1].(Getter)
-		err = errors.Join(err, combine(dst, src, func(_, r uint16) uint16 {
-			return r
-		}))
+		must(dst.W() == src.W(), ErrOperandWidthMismatch)
+		switch dst.W() {
+		default:
+			must(false, fmt.Errorf("unreachable"))
+		case 0:
+			dst.SetB(cpu, src.GetB(cpu))
+		case 1:
+			dst.SetW(cpu, src.GetW(cpu))
+		}
 	case OpPushRm:
 	case OpPushReg:
 	case OpPushSeg:
@@ -1750,11 +1749,19 @@ func (cpu *CPU) Step(inst Instruction) (err error) {
 	case OpXorRegRm, OpXorRmImm, OpXorAccImm:
 		dst := inst.operands[0].(GetterSetter)
 		src := inst.operands[1].(Getter)
-		err = errors.Join(combine(dst, src, func(l, r uint16) uint16 {
-			o := l ^ r
-			Flags{&cpu.RegisterFile[RegFLAGS]}.OF(0, 0, 0).CF(0, 0).ZF(o).SF(o).PF(o)
-			return o
-		}))
+		must(dst.W() == src.W(), ErrOperandWidthMismatch)
+		switch dst.W() {
+		default:
+			must(false, fmt.Errorf("unreachable"))
+		case 0:
+			r := dst.GetB(cpu) ^ src.GetB(cpu)
+			dst.SetB(cpu, r)
+			Flags{&cpu.RegisterFile[RegFLAGS]}.OF(0, 0, 0).CF(0, 0).ZF(r).SF(r).PF(r)
+		case 1:
+			r := dst.GetW(cpu) ^ src.GetW(cpu)
+			dst.SetW(cpu, r)
+			Flags{&cpu.RegisterFile[RegFLAGS]}.OF(0, 0, 0).CF(0, 0).ZF(r).SF(r).PF(r)
+		}
 	case OpRep:
 	case OpMovsb:
 	case OpCmpsb:
