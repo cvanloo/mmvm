@@ -587,20 +587,20 @@ func (inst Instruction) String() string {
 }
 
 type (
-	InstructionStringWithOffset struct {
+	InstructionFormatterWithOffset struct {
 		Instruction
 	}
-	InstructionStringWithMemoryAccess struct {
+	InstructionFormatterWithMemoryAccess struct {
 		inst Instruction
 		cpu *CPU
 	}
 )
 
-func (iswo InstructionStringWithOffset) String() string {
+func (iswo InstructionFormatterWithOffset) String() string {
 	return fmt.Sprintf("%04x: %s", iswo.Instruction.offset, iswo.Instruction)
 }
 
-func (iswma InstructionStringWithMemoryAccess) String() string {
+func (iswma InstructionFormatterWithMemoryAccess) String() string {
 	if len(iswma.inst.operands) <= 2 {
 		for _, opnd := range iswma.inst.operands {
 			switch m := opnd.(type) {
@@ -1805,7 +1805,7 @@ func emulate(exec Exec, bin []byte, debug bool) error {
 		}
 		if debug {
 			// @todo: print calculated address and read value for memory accesses
-			fmt.Printf("%s:%s\n", cpu, InstructionStringWithMemoryAccess{inst, cpu})
+			fmt.Printf("%s:%s\n", cpu, InstructionFormatterWithMemoryAccess{inst, cpu})
 		}
 		cpu.Step(inst)
 	}
@@ -1851,7 +1851,7 @@ func main() {
 			log.Println(err)
 		}
 		for _, inst := range insts {
-			fmt.Println(InstructionStringWithOffset{inst})
+			fmt.Println(InstructionFormatterWithOffset{inst})
 		}
 	} else {
 		// @todo: how to setup stack, data, etc?
