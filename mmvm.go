@@ -119,6 +119,13 @@ const (
 )
 
 const (
+	SegES byte = iota
+	SegCS
+	SegSS
+	SegDS
+)
+
+const (
 	OpInvalid Operation = iota
 	OpMovRegRm
 	OpMovRmImm
@@ -469,8 +476,12 @@ func (ops Operands) String() string {
 	return builder.String()
 }
 
-func (reg Register) IsSegment() bool {
-	return reg.name >= 0 && reg.name <= 3
+func (reg Register) IsGeneralPurpose() bool {
+	return reg.name >= RegA && reg.name <= RegB
+}
+
+func (reg Register) IsSpecialPurpose() bool {
+	return reg.name >= RegSP && reg.name <= RegIP
 }
 
 func (reg Register) String() string {
@@ -1399,6 +1410,28 @@ type (
 	}
 )
 
+func flagExtract(offset byte) func(uint16) uint16 {
+	return func(flags uint16) uint16 {
+		return (flags >> offset) & 1
+	}
+}
+
+var (
+	CF = flagExtract(0)
+	PF = flagExtract(2)
+	AF = flagExtract(4)
+	ZF = flagExtract(6)
+	SF = flagExtract(7)
+	TF = flagExtract(8)
+	IF = flagExtract(9)
+	DF = flagExtract(10)
+	OF = flagExtract(11)
+)
+
+func (cpu *CPU) Flags() Flags {
+	return Flags{&cpu.RegisterFile[RegFLAGS]}
+}
+
 func (f Flags) Set(i, s uint16) Flags {
 	v := *f.reg
 	*f.reg = (v & ^(uint16(1) << i)) | (s << i)
@@ -1406,7 +1439,16 @@ func (f Flags) Set(i, s uint16) Flags {
 }
 
 func (f Flags) CF(a, b uint16) Flags {
+	// @fixme: what about 8 bit values?
 	if uint32(a) + uint32(b) > math.MaxUint16 {
+		return f.Set(0, 1)
+	}
+	return f.Set(0, 0)
+}
+
+func (f Flags) CFc(a, b, c uint16) Flags {
+	// @fixme: what about 8 bit values?
+	if uint32(a) + uint32(b) + uint32(c) > math.MaxUint16 {
 		return f.Set(0, 1)
 	}
 	return f.Set(0, 0)
@@ -1425,6 +1467,16 @@ func (f Flags) AF(a, b, r uint16) Flags {
 	// @note: https://en.wikipedia.org/wiki/Half-carry_flag#The_Auxiliary_Carry_Flag_in_x86
 	//   check if a carry over happens from bit 3 to bit 4 (from lowest nibble to next nibble)
 	if ((a ^ b ^ r) & 0x10) != 0 {
+		return f.Set(4, 1)
+	}
+	return f.Set(4, 0)
+}
+
+func (f Flags) AFc(a, b, c, r uint16) Flags {
+	// @note: https://en.wikipedia.org/wiki/Half-carry_flag#The_Auxiliary_Carry_Flag_in_x86
+	//   check if a carry over happens from bit 3 to bit 4 (from lowest nibble to next nibble)
+	// @fixme: is this even correct?
+	if ((a ^ b ^ c ^ r) & 0x10) != 0 {
 		return f.Set(4, 1)
 	}
 	return f.Set(4, 0)
@@ -1457,7 +1509,18 @@ func (f Flags) DF(s uint16) Flags {
 }
 
 func (f Flags) OF(a, b, r uint16) Flags {
-	if (a >> 15) == (b >> 15) && (a >> 15) != (b >> 15) {
+	// @fixme: what about 8 bit values?
+	if (a >> 15) == (b >> 15) && (a >> 15) != (r >> 15) {
+		return f.Set(11, 1)
+	}
+	return f.Set(11, 0)
+}
+
+func (f Flags) OFc(a, b, c uint16) Flags {
+	// @fixme: what about 8 bit values?
+	// @fixme: what about subtraction? does this still apply?
+	r := int32(int16(a)) + int32(int16(b)) + int32(int16(c))
+	if r < math.MinInt16 || r > math.MaxInt16 {
 		return f.Set(11, 1)
 	}
 	return f.Set(11, 0)
@@ -1640,21 +1703,24 @@ func (cpu *CPU) Decode(src *Source) (Instruction, error) {
 }
 
 var (
-	ErrOperandWidthMismatch = errors.New("operands differ in width")
 	ErrIllegalInstruction = errors.New("illegal instruction")
+	ErrOperandWidthMismatch = errors.New("operands differ in width")
+	ErrRegisterSize = errors.New("register of wrong size")
+	ErrRegisterGP = errors.New("register not for general purpose")
 )
 
 func (cpu *CPU) Step(inst Instruction) {
+	// @todo: processor exceptions?
 	check := func(o1, o2 any) {
 		wo1 := o1.(interface{W() byte})
 		wo2 := o2.(interface{W() byte})
-		must(wo1 == wo2, ErrOperandWidthMismatch)
+		assert(wo1.W() == wo2.W(), ErrOperandWidthMismatch)
 	}
 	switch inst.operation {
 	default:
 		fallthrough
 	case OpInvalid:
-		must(false, ErrIllegalInstruction)
+		assert(false, ErrIllegalInstruction)
 	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
 		dst := inst.operands[0].(Setter)
 		src := inst.operands[1].(Getter)
@@ -1669,11 +1735,11 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpOutVarPort:
 	case OpXLAT:
 	case OpLEA:
-		dst := inst.operands[0].(Setter)
+		dst := inst.operands[0].(Register)
 		mem := inst.operands[1].(Memory)
-		check(dst, mem)
+		assert(dst.IsGeneralPurpose(), ErrRegisterGP)
+		assert(dst.width == 1, ErrRegisterSize)
 		dst.Set(cpu, mem.Addr(cpu))
-		// @todo: Behavior/FLAGS
 	case OpLDS:
 	case OpLES:
 	case OpLAHF:
@@ -1682,18 +1748,23 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpPOPF:
 	case OpAddRegRm, OpAddRmImm, OpAddAccImm:
 		dst := inst.operands[0].(GetterSetter)
-		src := inst.operands[1].(Getter)
+		src := inst.operands[1].(Getter) // @fixme: immediate must be sign-extended to fit destination operand (make sure that this is done properly)
 		check(dst, src)
-		r := dst.Get(cpu) + src.Get(cpu)
+		a := dst.Get(cpu)
+		b := src.Get(cpu)
+		r := a + b
 		dst.Set(cpu, r)
-		// @todo: Behavior/FLAGS
+		cpu.Flags().OF(a, b, r).SF(r).ZF(r).AF(a, b, r).CF(a, b).PF(r)
 	case OpAdcRegRm, OpAdcRmImm, OpAdcAccImm:
 		dst := inst.operands[0].(GetterSetter)
-		src := inst.operands[1].(Getter)
+		src := inst.operands[1].(Getter) // @fixme: immediate must be sign-extended to fit destination operand (make sure that this is done properly)
 		check(dst, src)
-		r := dst.Get(cpu) + src.Get(cpu)
+		a := dst.Get(cpu)
+		b := src.Get(cpu)
+		c := CF(cpu.RegisterFile[RegFLAGS])
+		r := a + b + c
 		dst.Set(cpu, r)
-		// @todo: Behavior/FLAGS
+		cpu.Flags().OFc(a, b, c).SF(r).ZF(r).AFc(a, b, c, r).CFc(a, b, c).PF(r)
 	case OpIncRm, OpIncReg:
 	case OpAAA:
 	case OpBAA:
@@ -1729,7 +1800,7 @@ func (cpu *CPU) Step(inst Instruction) {
 		check(dst, src)
 		r := dst.Get(cpu) ^ src.Get(cpu)
 		dst.Set(cpu, r)
-		Flags{&cpu.RegisterFile[RegFLAGS]}.OF(0, 0, 0).CF(0, 0).ZF(r).SF(r).PF(r)
+		cpu.Flags().OF(0, 0, 0).CF(0, 0).SF(r).ZF(r).PF(r)
 	case OpRep:
 	case OpMovsb:
 	case OpCmpsb:
@@ -1824,6 +1895,12 @@ func emulate(exec Exec, bin []byte, debug bool) error {
 		cpu.Step(inst)
 	}
 	return ErrHaltAndCatchFire
+}
+
+func assert(b bool, err error) {
+	if !b {
+		panic(err)
+	}
 }
 
 func must[T any](t T, err error) T {
