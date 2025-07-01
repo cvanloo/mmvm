@@ -12,6 +12,7 @@ import (
 	"flag"
 	"math"
 	"math/bits"
+	"runtime"
 )
 
 // @todo: https://www.muppetlabs.com/~breadbox/txt/mopb.html
@@ -1897,9 +1898,10 @@ func emulate(exec Exec, bin []byte, debug bool) error {
 	return ErrHaltAndCatchFire
 }
 
-func assert(b bool, err error) {
-	if !b {
-		panic(err)
+func assert(v bool, msg any) {
+	if !v {
+		pc, f, l, _ := runtime.Caller(1)
+		panic(fmt.Sprintf("assertion in %s[%s:%d] failed: %v", runtime.FuncForPC(pc).Name(), f, l, msg))
 	}
 }
 
