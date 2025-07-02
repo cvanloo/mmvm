@@ -4,6 +4,7 @@ import (
 	//"unsafe"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"errors"
 	"encoding/binary"
@@ -1392,12 +1393,13 @@ type (
 	CPU struct {
 		RegisterFile [10]uint16
 		Memory RAM
+		ProgramBreak uint16
 	}
 	Flags struct {
 		reg *uint16
 	}
 	RAM struct {
-		Text, Data [1<<32]byte
+		Data [1<<32]byte
 	}
 	Getter interface {
 		Get(cpu *CPU) (val uint16)
@@ -1410,6 +1412,26 @@ type (
 		Setter
 	}
 )
+
+func (r *RAM) WriteBytes(addr uint16, val []byte) {
+	copy(r.Data[addr:addr+uint16(len(val))], val)
+}
+
+func (r *RAM) WriteString(addr uint16, val string) {
+	copy(r.Data[addr:addr+uint16(len(val))], val[:])
+	r.Data[addr+uint16(len(val))] = 0
+}
+
+func (r *RAM) WriteZeros(addr uint16, count uint16) {
+	for i := range count {
+		r.Data[addr+i] = 0
+	}
+}
+
+func (r *RAM) Write16(addr uint16, val uint16) {
+	r.Data[addr] = byte(val >> 8)
+	r.Data[addr+1] = byte(val)
+}
 
 func flagExtract(offset byte) func(uint16) uint16 {
 	return func(flags uint16) uint16 {
@@ -1693,7 +1715,7 @@ func (cpu *CPU) String() string {
 
 func (cpu *CPU) Fetch() *Source {
 	return &Source{
-		Text: cpu.Memory.Text[:],
+		Text: cpu.Memory.Data[:],
 		Consumed: int(cpu.RegisterFile[RegIP]),
 		Pos: int(cpu.RegisterFile[RegIP]),
 	}
@@ -1872,20 +1894,115 @@ func (cpu *CPU) Step(inst Instruction) {
 	cpu.RegisterFile[RegIP] += uint16(inst.size)
 }
 
-var ErrHaltAndCatchFire = errors.New("halted and on fire")
+var (
+	ErrHaltAndCatchFire = errors.New("halted and on fire")
+)
 
-func emulate(exec Exec, bin []byte, debug bool) error {
+type MinixError string
+
+func (err MinixError) Error() string {
+	return string(err)
+}
+
+var (
+	E2BIG = MinixError("argument list too long")
+)
+
+func (cpu *CPU) execve(path string, argv, envp []string) error {
+	const ptrSize = 2 // size_t is 2B
+	argc := uint16(len(argv))
+	frameSize := 3*uint16(ptrSize) // space for argc and two terminating nulls
+	stringOff := frameSize
+	for _, s := range slices.Concat(argv, envp) {
+		n := ptrSize + uint16(len(s)) + 1
+		frameSize += n
+		stringOff += ptrSize
+		if frameSize < n {
+			return E2BIG
+		}
+	}
+	frameSize = (frameSize + 1) & 0xFE // align to 2
+	frame := cpu.sbrk(int16(frameSize))
+	if frame == math.MaxUint16 { // @todo: define custom ptr type
+		return E2BIG
+	}
+	cpu.Memory.Write16(frame, argc)
+	vp := frame + 2
+	sp := frame + stringOff
+	for _, s := range argv {
+		cpu.Memory.Write16(vp, sp - frame); vp += 2
+		cpu.Memory.WriteString(sp, s); sp += uint16(len(s)) + 1
+	}
+	cpu.Memory.Write16(vp, 0); vp += 2
+	for _, s := range envp {
+		cpu.Memory.Write16(vp, sp - frame); vp += 2
+		cpu.Memory.WriteString(sp, s); sp += uint16(len(s)) + 1
+	}
+	cpu.Memory.Write16(vp, 0); vp += 2
+	for ; sp < frame + frameSize; sp += 2 {
+		cpu.Memory.Write16(sp, 0)
+	}
+	return nil
+}
+
+func (cpu *CPU) brk(addr uint16) error {
+	// @todo: work in chuncks
+	// @todo: verify bounds
+	cpu.ProgramBreak = addr
+	return nil
+}
+
+func (cpu *CPU) sbrk(incr int16) uint16 {
+	oldSize := cpu.ProgramBreak
+	newSize := uint16(int16(oldSize) + incr)
+	if (incr > 0 && newSize < oldSize) || (incr < 0 && newSize > oldSize) {
+		return math.MaxUint16
+	}
+	if err := cpu.brk(newSize); err != nil {
+		return math.MaxUint16
+	}
+	return oldSize
+}
+
+func emulate(exec Exec, name string, bin []byte, debug bool) error {
 	cpu := &CPU{}
+	cpu.RegisterFile[RegSP] = 0xFFFE
 	// @todo: flags = 0x20 for separate text/data
+
+	/* Memory Layout
+	 *
+	 * ╭─────────╮ 0xFFFF
+	 * │ nil ptr │
+	 * │---------│ 0xFFFE
+	 * │ stack   │
+	 * │   |     │
+	 * │   v     │ <- sp
+	 * ¦         ¦
+	 * ¦         ¦
+	 * ¦         ¦
+	 * │   ^     │ <- brksize (pointer to (after the) end of data segment)
+	 * │   |     │
+	 * │ heap    │
+	 * │---------│
+	 * │ bss     │ initialized to 0, size of which is read from a.out
+	 * │---------│
+	 * │ data    │ read from a.out
+	 * │---------│
+	 * │ text    │ read from a.out
+	 * ╰─────────╯
+	 */
 	text := exec.Text(bin)
 	data := exec.Data(bin)
-	// @todo: have to allocate argv (arguments) and envp (environment)
-	copy(cpu.Memory.Text[:], text)
-	copy(cpu.Memory.Data[:], data)
-	// @todo: allocate BSS (exec.SizeBSS)
-	// @todo: allocate strings / symbols
+	off := uint16(0)
+	cpu.Memory.WriteBytes(off, text); off += uint16(len(text))
+	cpu.Memory.WriteBytes(off, data); off += uint16(len(data))
+	cpu.Memory.WriteZeros(off, uint16(exec.SizeBSS)); off += uint16(exec.SizeBSS)
+	cpu.ProgramBreak = off
+	// @todo: allocate symbols
+	if err := cpu.execve(name, []string{name}, nil); err != nil {
+		return err
+	}
 	cpu.RegisterFile[RegIP] = uint16(exec.EntryPoint)
-	cpu.RegisterFile[RegSP] = 0xFFCE
 	if debug {
 		fmt.Println(" AX   BX   CX   DX   SP   BP   SI   DI  FLAGS IP")
 	}
@@ -1958,8 +2075,7 @@ func main() {
 			fmt.Println(InstructionFormatterWithOffset{inst})
 		}
 	} else {
-		// @todo: how to setup stack, data, etc?
-		err := emulate(exec, bin, *m)
+		err := emulate(exec, file, bin, *m)
 		if err != nil {
 			log.Println(err)
 		}
