@@ -1901,72 +1901,48 @@ var (
 type MinixError string
 
 func (err MinixError) Error() string {
-	return string(err)
+	return "minix: " + string(err)
 }
 
 var (
 	E2BIG = MinixError("argument list too long")
 )
 
-func (cpu *CPU) execve(path string, argv, envp []string) error {
-	const ptrSize = 2 // size_t is 2B
-	argc := uint16(len(argv))
-	frameSize := 3*uint16(ptrSize) // space for argc and two terminating nulls
-	stringOff := frameSize
-	for _, s := range slices.Concat(argv, envp) {
-		n := ptrSize + uint16(len(s)) + 1
-		frameSize += n
-		stringOff += ptrSize
-		if frameSize < n {
-			return E2BIG
-		}
+func (cpu *CPU) execve(argv, envp []string) {
+	totalLen := 3*uint16(2) // argc, two nil pointers
+	for _, s := range slices.Concat(envp, argv) {
+		totalLen += uint16(len(s)) + 1
+		totalLen += 2
 	}
-	frameSize = (frameSize + 1) & 0xFE // align to 2
-	frame := cpu.sbrk(int16(frameSize))
-	if frame == math.MaxUint16 { // @todo: define custom ptr type
-		return E2BIG
+	frame := cpu.RegisterFile[RegSP]
+	// padding for alignment if necessary
+	if (frame - totalLen) % 2 != 0 {
+		frame -= 1; cpu.Memory.WriteZeros(frame, 1)
 	}
-	cpu.Memory.Write16(frame, argc)
-	vp := frame + 2
-	sp := frame + stringOff
-	for _, s := range argv {
-		cpu.Memory.Write16(vp, sp - frame); vp += 2
-		cpu.Memory.WriteString(sp, s); sp += uint16(len(s)) + 1
+	fmt.Printf("totalLen: %d, frameStart: %04x\n", totalLen, frame - totalLen)
+	addrs := make([]uint16, len(argv) + len(envp))
+	for i, s := range slices.Concat(envp, argv) {
+		frame -= uint16(len(s)) + 1
+		cpu.Memory.WriteString(frame, s)
+		addrs[i] = frame
 	}
-	cpu.Memory.Write16(vp, 0); vp += 2
-	for _, s := range envp {
-		cpu.Memory.Write16(vp, sp - frame); vp += 2
-		cpu.Memory.WriteString(sp, s); sp += uint16(len(s)) + 1
+	frame -= 2; cpu.Memory.Write16(frame, 0)
+	for _, p := range addrs[:len(envp)] {
+		frame -= 2; cpu.Memory.Write16(frame, p)
 	}
-	cpu.Memory.Write16(vp, 0); vp += 2
-	for ; sp < frame + frameSize; sp += 2 {
-		cpu.Memory.Write16(sp, 0)
+	frame -= 2; cpu.Memory.Write16(frame, 0)
+	for _, p := range addrs[len(envp):] {
+		frame -= 2; cpu.Memory.Write16(frame, p)
 	}
-	return nil
-}
-
-func (cpu *CPU) brk(addr uint16) error {
-	// @todo: work in chuncks
-	// @todo: verify bounds
-	cpu.ProgramBreak = addr
-	return nil
-}
-
-func (cpu *CPU) sbrk(incr int16) uint16 {
-	oldSize := cpu.ProgramBreak
-	newSize := uint16(int16(oldSize) + incr)
-	if (incr > 0 && newSize < oldSize) || (incr < 0 && newSize > oldSize) {
-		return math.MaxUint16
-	}
-	if err := cpu.brk(newSize); err != nil {
-		return math.MaxUint16
-	}
-	return oldSize
+	frame -= 2; cpu.Memory.Write16(frame, uint16(len(argv)))
+	cpu.RegisterFile[RegSP] = frame
 }
 
 func emulate(exec Exec, name string, bin []byte, debug bool) error {
 	cpu := &CPU{}
-	cpu.RegisterFile[RegSP] = 0xFFFE
+	cpu.RegisterFile[RegSP] = 0xFFFF // 0xFFFE, 0x0000
+	// @todo: Minix2:SYS/src/mm/exec.c +50
+	cpu.execve([]string{name}, []string{"PATH=/usr:/usr/bin"})
 	// @todo: flags = 0x20 for separate text/data
 
 	/* Memory Layout
@@ -1997,11 +1973,7 @@ func emulate(exec Exec, name string, bin []byte, debug bool) error {
 	cpu.Memory.WriteBytes(off, text); off += uint16(len(text))
 	cpu.Memory.WriteBytes(off, data); off += uint16(len(data))
 	cpu.Memory.WriteZeros(off, uint16(exec.SizeBSS)); off += uint16(exec.SizeBSS)
-	cpu.ProgramBreak = off
 	// @todo: allocate symbols
-	if err := cpu.execve(name, []string{name}, nil); err != nil {
-		return err
-	}
 	cpu.RegisterFile[RegIP] = uint16(exec.EntryPoint)
 	if debug {
 		fmt.Println(" AX   BX   CX   DX   SP   BP   SI   DI  FLAGS IP")
