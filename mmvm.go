@@ -1441,13 +1441,8 @@ func flagExtract(offset byte) func(uint16) uint16 {
 
 var (
 	CF = flagExtract(0)
-	PF = flagExtract(2)
-	AF = flagExtract(4)
 	ZF = flagExtract(6)
 	SF = flagExtract(7)
-	TF = flagExtract(8)
-	IF = flagExtract(9)
-	DF = flagExtract(10)
 	OF = flagExtract(11)
 )
 
@@ -1461,48 +1456,9 @@ func (f Flags) Set(i, s uint16) Flags {
 	return f
 }
 
-func (f Flags) CF(a, b uint16) Flags {
-	// @fixme: what about 8 bit values?
-	if uint32(a) + uint32(b) > math.MaxUint16 {
-		return f.Set(0, 1)
-	}
+func (f Flags) CF(a, b, c uint16) Flags {
+	panic("unimplemented")
 	return f.Set(0, 0)
-}
-
-func (f Flags) CFc(a, b, c uint16) Flags {
-	// @fixme: what about 8 bit values?
-	if uint32(a) + uint32(b) + uint32(c) > math.MaxUint16 {
-		return f.Set(0, 1)
-	}
-	return f.Set(0, 0)
-}
-
-func (f Flags) PF(r uint16) Flags {
-	// @note: https://en.wikipedia.org/wiki/Parity_flag#x86_processors
-	//   parity flag only considers LSB
-	if bits.OnesCount8(uint8(r)) % 2 == 0 {
-		return f.Set(2, 1)
-	}
-	return f.Set(2, 0)
-}
-
-func (f Flags) AF(a, b, r uint16) Flags {
-	// @note: https://en.wikipedia.org/wiki/Half-carry_flag#The_Auxiliary_Carry_Flag_in_x86
-	//   check if a carry over happens from bit 3 to bit 4 (from lowest nibble to next nibble)
-	if ((a ^ b ^ r) & 0x10) != 0 {
-		return f.Set(4, 1)
-	}
-	return f.Set(4, 0)
-}
-
-func (f Flags) AFc(a, b, c, r uint16) Flags {
-	// @note: https://en.wikipedia.org/wiki/Half-carry_flag#The_Auxiliary_Carry_Flag_in_x86
-	//   check if a carry over happens from bit 3 to bit 4 (from lowest nibble to next nibble)
-	// @fixme: is this even correct?
-	if ((a ^ b ^ c ^ r) & 0x10) != 0 {
-		return f.Set(4, 1)
-	}
-	return f.Set(4, 0)
 }
 
 func (f Flags) ZF(r uint16) Flags {
@@ -1519,33 +1475,8 @@ func (f Flags) SF(r uint16) Flags {
 	return f.Set(7, 0)
 }
 
-func (f Flags) TF(s uint16) Flags {
-	return f.Set(8, s)
-}
-
-func (f Flags) IF(s uint16) Flags {
-	return f.Set(9, s)
-}
-
-func (f Flags) DF(s uint16) Flags {
-	return f.Set(10, s)
-}
-
-func (f Flags) OF(a, b, r uint16) Flags {
-	// @fixme: what about 8 bit values?
-	if (a >> 15) == (b >> 15) && (a >> 15) != (r >> 15) {
-		return f.Set(11, 1)
-	}
-	return f.Set(11, 0)
-}
-
-func (f Flags) OFc(a, b, c uint16) Flags {
-	// @fixme: what about 8 bit values?
-	// @fixme: what about subtraction? does this still apply?
-	r := int32(int16(a)) + int32(int16(b)) + int32(int16(c))
-	if r < math.MinInt16 || r > math.MaxInt16 {
-		return f.Set(11, 1)
-	}
+func (f Flags) OF(a, b, c, r uint16) Flags {
+	panic("unimplemented")
 	return f.Set(11, 0)
 }
 
@@ -1682,13 +1613,8 @@ func (cpu *CPU) String() string {
 	flags := func(flags uint16) string {
 		s := []byte("----")
 		CF := (flags >>  0) & 1
-		//PF := (flags >>  2) & 1
-		//AF := (flags >>  4) & 1
 		ZF := (flags >>  6) & 1
 		SF := (flags >>  7) & 1
-		//TF := (flags >>  8) & 1
-		//IF := (flags >>  9) & 1
-		//DF := (flags >> 10) & 1
 		OF := (flags >> 11) & 1
 		if CF == 1 {
 			s[3] = 'C'
@@ -2031,7 +1957,7 @@ func main() {
 	if err := binary.Read(bytes.NewReader(bin), binary.LittleEndian, &exec); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("%#v\n", exec)
+	//fmt.Printf("%#v\n", exec)
 	if exec.BadMag() {
 		log.Fatal("bad magic")
 	}
