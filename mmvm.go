@@ -614,6 +614,31 @@ func (iswo InstructionFormatterWithOffset) String() string {
 }
 
 func (iswma InstructionFormatterWithMemoryAccess) String() string {
+	printInst := func(inst Instruction) string {
+		sizeSpecifier := func() string {
+			if len(inst.operands) >= 2 {
+				switch inst.operands[0].(type) {
+				case Memory:
+					switch imm := inst.operands[1].(type) {
+					case Immediate:
+						if imm.width == 0 {
+							return " byte"
+						}
+					case SignedImmediate:
+						if imm.width == 0 {
+							return " byte"
+						}
+					}
+				}
+			}
+			return ""
+		}
+		if len(inst.operands) > 0 {
+			return fmt.Sprintf("%-13x%s%s %s", inst.bytes[:inst.size], inst.operation, sizeSpecifier(), inst.operands)
+		} else {
+			return fmt.Sprintf("%-13x%s", inst.bytes[:inst.size], inst.operation)
+		}
+	}
 	if len(iswma.inst.operands) <= 2 {
 		for _, opnd := range iswma.inst.operands {
 			switch m := opnd.(type) {
@@ -622,15 +647,15 @@ func (iswma InstructionFormatterWithMemoryAccess) String() string {
 				default:
 					panic(fmt.Errorf("invalid width: ", m.width))
 				case 0:
-					return fmt.Sprintf("%s ;[%04x]%04x", iswma.inst, m.Addr(iswma.cpu), uint8(iswma.cpu.Get8(m)))
+					return fmt.Sprintf("%s ;[%04x]%04x", printInst(iswma.inst), m.Addr(iswma.cpu), uint8(iswma.cpu.Get8(m)))
 				case 1:
-					return fmt.Sprintf("%s ;[%04x]%04x", iswma.inst, m.Addr(iswma.cpu), uint16(iswma.cpu.Get16(m)))
+					return fmt.Sprintf("%s ;[%04x]%04x", printInst(iswma.inst), m.Addr(iswma.cpu), uint16(iswma.cpu.Get16(m)))
 				}
 			//@todo: case Address:
 			}
 		}
 	}
-	return iswma.inst.String()
+	return printInst(iswma.inst)
 }
 
 func W(i byte) byte {
