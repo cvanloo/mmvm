@@ -1688,8 +1688,9 @@ func (cpu *CPU) Step(inst Instruction) {
 						if *m {
 							fmt.Printf(" => %d>\n", ret)
 						}
+						cpu.RegisterFile[RegA] = 0 // ?
+						return uint16(ret)
 					}
-					return 0
 				},
 			}
 			type Msg struct {
@@ -1699,7 +1700,7 @@ func (cpu *CPU) Step(inst Instruction) {
 			bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
 			msg := (*Msg)(unsafe.Pointer(&bs[0]))
 			ret := sysVector[msg.type_](cpu)
-			cpu.RegisterFile[RegA] = ret
+			msg.type_ = ret
 		},
 	}
 	switch inst.operation {
