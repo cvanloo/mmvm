@@ -11,9 +11,8 @@ import (
 	"bytes"
 	"log"
 	"flag"
-	"math"
-	"math/bits"
 	"runtime"
+	"math"
 )
 
 // @todo: https://www.muppetlabs.com/~breadbox/txt/mopb.html
@@ -43,7 +42,8 @@ type (
 	}
 	Operation int
 	Operand interface {
-		AsmString() string
+		String() string
+		W() byte
 	}
 	Operands []Operand
 	Instruction struct {
@@ -473,7 +473,7 @@ func (ops Operands) String() string {
 		if i > 0 {
 			builder.WriteString(", ")
 		}
-		builder.WriteString(op.AsmString())
+		builder.WriteString(op.String())
 	}
 	return builder.String()
 }
@@ -487,28 +487,24 @@ func (reg Register) IsSpecialPurpose() bool {
 }
 
 func (reg Register) String() string {
-	return reg.AsmString()
-}
-
-func (reg Register) AsmString() string {
 	names := []string{"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh", "ax", "cx", "dx", "bx", "sp", "bp", "si", "di"}
 	return names[reg.name+reg.width*8]
 }
 
-func (seg Segment) String() string {
-	return seg.AsmString()
+func (reg Register) W() byte {
+	return reg.width
 }
 
-func (seg Segment) AsmString() string {
+func (seg Segment) String() string {
 	names := []string{"es", "cs", "ss", "ds"}
 	return names[seg.name]
 }
 
-func (mem Memory) String() string {
-	return mem.AsmString()
+func (seg Segment) W() byte {
+	return 1
 }
 
-func (mem Memory) AsmString() string {
+func (mem Memory) String() string {
 	names := []string{"bx+si", "bx+di", "bp+si", "bp+di", "si", "di", "bp", "bx"}
 	switch mem.mod {
 	default:
@@ -529,48 +525,52 @@ func (mem Memory) AsmString() string {
 	}
 }
 
-func (addr Address) String() string {
-	return addr.AsmString()
+func (mem Memory) W() byte {
+	return mem.width
 }
 
-func (addr Address) AsmString() string {
+func (addr Address) String() string {
 	return fmt.Sprintf("[%04x]", addr.addr)
 }
 
-func (so SegmentOffset) String() string {
-	return so.AsmString()
+func (addr Address) W() byte {
+	return addr.width
 }
 
-func (so SegmentOffset) AsmString() string {
+func (so SegmentOffset) String() string {
 	return fmt.Sprintf("%04x:%04x", so.segment, so.offset)
 }
 
-func (imm Immediate) String() string {
-	return imm.AsmString()
+func (so SegmentOffset) W() byte {
+	panic("not implemented")
 }
 
-func (imm Immediate) AsmString() string {
+func (imm Immediate) String() string {
 	return fmt.Sprintf("%0[1]*x", (imm.width)*4, imm.value)
 }
 
-func (imm SignedImmediate) String() string {
-	return imm.AsmString()
+func (imm Immediate) W() byte {
+	return imm.width
 }
 
-func (imm SignedImmediate) AsmString() string {
+func (imm SignedImmediate) String() string {
 	return fmt.Sprintf("%x", imm.value)
 }
 
-func (r Repeated) String() string {
-	return r.AsmString()
+func (imm SignedImmediate) W() byte {
+	return imm.width
 }
 
-func (r Repeated) AsmString() string {
+func (r Repeated) String() string {
 	if len(r.operands) > 0 {
 		return fmt.Sprintf("%s %s", r.operation, r.operands)
 	} else {
 		return fmt.Sprintf("%s", r.operation)
 	}
+}
+
+func (r Repeated) W() byte {
+	panic("nonsenes calling W() on Repeated")
 }
 
 func (inst Instruction) String() string {
@@ -618,7 +618,14 @@ func (iswma InstructionFormatterWithMemoryAccess) String() string {
 		for _, opnd := range iswma.inst.operands {
 			switch m := opnd.(type) {
 			case Memory:
-				return fmt.Sprintf("%s ;[%04x]%04x", iswma.inst, m.Addr(iswma.cpu), m.Get(iswma.cpu))
+				switch m.width {
+				default:
+					panic(fmt.Errorf("invalid width: ", m.width))
+				case 0:
+					return fmt.Sprintf("%s ;[%04x]%04x", iswma.inst, m.Addr(iswma.cpu), iswma.cpu.Get8(m))
+				case 1:
+					return fmt.Sprintf("%s ;[%04x]%04x", iswma.inst, m.Addr(iswma.cpu), iswma.cpu.Get16(m))
+				}
 			//@todo: case Address:
 			}
 		}
@@ -1401,16 +1408,6 @@ type (
 	RAM struct {
 		Data [1<<32]byte
 	}
-	Getter interface {
-		Get(cpu *CPU) (val uint16)
-	}
-	Setter interface {
-		Set(cpu *CPU, val uint16)
-	}
-	GetterSetter interface {
-		Getter
-		Setter
-	}
 )
 
 func (r *RAM) WriteBytes(addr uint16, val []byte) {
@@ -1451,58 +1448,77 @@ func (cpu *CPU) Flags() Flags {
 }
 
 func (f Flags) Set(i, s uint16) Flags {
-	v := *f.reg
-	*f.reg = (v & ^(uint16(1) << i)) | (s << i)
+	*f.reg = (*f.reg & ^(uint16(1) << i)) | (s << i)
 	return f
 }
 
-func (f Flags) CF(a, b, c uint16) Flags {
-	panic("unimplemented")
-	return f.Set(0, 0)
-}
-
-func (f Flags) ZF(r uint16) Flags {
-	if r == 0 {
-		return f.Set(6, 1)
+func (f Flags) SetB(i uint16, b bool) Flags {
+	if b {
+		return f.Set(i, 1)
+	} else {
+		return f.Set(i, 0)
 	}
-	return f.Set(6, 0)
 }
 
-func (f Flags) SF(r uint16) Flags {
-	if (r >> 15) == 1 {
-		return f.Set(7, 1)
-	}
-	return f.Set(7, 0)
+func (f Flags) SetZSCO(z, s, c, o bool) {
+	f.SetB(6, z).SetB(7, s).SetB(0, c).SetB(11, o)
 }
 
-func (f Flags) OF(a, b, c, r uint16) Flags {
-	panic("unimplemented")
-	return f.Set(11, 0)
-}
-
-func (r Register) W() byte {
-	return r.width
-}
-
-func (r Register) Get(cpu *CPU) (val uint16) {
-	switch r.width {
+func (cpu *CPU) Get8(opnd Operand) int32 {
+	switch o := opnd.(type) {
 	default:
-		panic("unreachable")
-	case 0:
-		return uint16(uint8(cpu.RegisterFile[r.name]))
-	case 1:
-		return cpu.RegisterFile[r.name]
+		panic(fmt.Errorf("invalid operand: %T", opnd))
+	case Register:
+		return int32(int8(cpu.RegisterFile[o.name]))
+	case Memory:
+		addr := o.Addr(cpu)
+		return int32(int8(cpu.Memory.Data[addr]))
+	case Immediate:
+		return int32(int8(o.value))
+	case SignedImmediate:
+		return int32(int8(o.value))
 	}
 }
 
-func (r Register) Set(cpu *CPU, val uint16) {
-	switch r.width {
+func (cpu *CPU) Get16(opnd Operand) int32 {
+	switch o := opnd.(type) {
 	default:
-		panic("unreachable")
-	case 0:
-		cpu.RegisterFile[r.name] = uint16(uint8(val))
-	case 1:
-		cpu.RegisterFile[r.name] = val
+		panic(fmt.Errorf("invalid operand: %T", opnd))
+	case Register:
+		return int32(int16(cpu.RegisterFile[o.name]))
+	case Memory:
+		addr := o.Addr(cpu)
+		return int32((int16(cpu.Memory.Data[addr]) << 8) | int16(cpu.Memory.Data[addr+1]))
+	case Immediate:
+		return int32(int16(o.value))
+	case SignedImmediate:
+		return int32(int16(o.value))
+	}
+}
+
+func (cpu *CPU) Set8(opnd Operand, val int32) {
+	switch o := opnd.(type) {
+	default:
+		panic(fmt.Errorf("invalid operand: %T", opnd))
+	case Register:
+		// write to lower half of the register zeros out the upper half
+		cpu.RegisterFile[o.name] = uint16(uint8(val))
+	case Memory:
+		addr := o.Addr(cpu)
+		cpu.Memory.Data[addr] = byte(val)
+	}
+}
+
+func (cpu *CPU) Set16(opnd Operand, val int32) {
+	switch o := opnd.(type) {
+	default:
+		panic(fmt.Errorf("invalid operand: %T", opnd))
+	case Register:
+		cpu.RegisterFile[o.name] = uint16(val)
+	case Memory:
+		addr := o.Addr(cpu)
+		cpu.Memory.Data[addr+0] = byte(val >> 8)
+		cpu.Memory.Data[addr+1] = byte(val >> 0)
 	}
 }
 
@@ -1545,67 +1561,6 @@ func (mem Memory) Addr(cpu *CPU) uint16 {
 	case 0b10:
 		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
 		return BaseOffset(cpu, mem.rm, disp)
-	}
-}
-
-func (mem Memory) W() byte {
-	return mem.width
-}
-
-func (mem Memory) Get(cpu *CPU) (val uint16) {
-	switch mem.width {
-	default:
-		panic("unreachable")
-	case 0:
-		addr := mem.Addr(cpu)
-		return uint16(cpu.Memory.Data[addr])
-	case 1:
-		addr := mem.Addr(cpu)
-		return (uint16(cpu.Memory.Data[addr]) << 8) | uint16(cpu.Memory.Data[addr+1])
-	}
-}
-
-func (mem Memory) Set(cpu *CPU, val uint16) {
-	switch mem.width {
-	default:
-		panic("unreachable")
-	case 0:
-		addr := mem.Addr(cpu)
-		cpu.Memory.Data[addr] = uint8(val)
-	case 1:
-		addr := mem.Addr(cpu)
-		cpu.Memory.Data[addr] = byte(val >> 8)
-		cpu.Memory.Data[addr+1] = byte(val)
-	}
-}
-
-func (i Immediate) W() byte {
-	return i.width
-}
-
-func (i Immediate) Get(cpu *CPU) (val uint16) {
-	switch i.width {
-	default:
-		panic("unreachable")
-	case 0:
-		return uint16(uint8(i.value))
-	case 1:
-		return i.value
-	}
-}
-
-func (i SignedImmediate) W() byte {
-	return i.width
-}
-
-func (i SignedImmediate) Get(cpu *CPU) (val uint16) {
-	switch i.width {
-	default:
-		panic("unreachable")
-	case 0:
-		return uint16(uint8(i.value))
-	case 1:
-		return uint16(i.value)
 	}
 }
 
@@ -1660,10 +1615,14 @@ var (
 
 func (cpu *CPU) Step(inst Instruction) {
 	// @todo: processor exceptions?
-	check := func(o1, o2 any) {
-		wo1 := o1.(interface{W() byte})
-		wo2 := o2.(interface{W() byte})
-		assert(wo1.W() == wo2.W(), ErrOperandWidthMismatch)
+	isImm := func(opnd Operand) bool {
+		switch opnd.(type) {
+		default:
+			return false
+		case Immediate:
+			return true
+			// @todo: or SignedImmediate
+		}
 	}
 	switch inst.operation {
 	default:
@@ -1671,10 +1630,19 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpInvalid:
 		assert(false, ErrIllegalInstruction)
 	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
-		dst := inst.operands[0].(Setter)
-		src := inst.operands[1].(Getter)
-		check(dst, src)
-		dst.Set(cpu, src.Get(cpu))
+		dst := inst.operands[0]
+		src := inst.operands[1]
+		switch {
+		default:
+			panic(ErrOperandWidthMismatch)
+		case dst.W() == 0 && src.W() == 0:
+			r := cpu.Get8(dst) + cpu.Get8(src)
+			cpu.Set8(dst, r)
+		case dst.W() == 1 && src.W() == 1:
+			r := cpu.Get16(dst) + cpu.Get16(src)
+			cpu.Set16(dst, r)
+		}
+		// FLAGS none affected
 	case OpPushRm, OpPushReg, OpPushSeg:
 	case OpPopRm, OpPopReg, OpPopSeg:
 	case OpXchgRmReg, OpXchgAccReg:
@@ -1684,11 +1652,12 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpOutVarPort:
 	case OpXLAT:
 	case OpLEA:
-		dst := inst.operands[0].(Register)
+		reg := inst.operands[0].(Register)
 		mem := inst.operands[1].(Memory)
-		assert(dst.IsGeneralPurpose(), ErrRegisterGP)
-		assert(dst.width == 1, ErrRegisterSize)
-		dst.Set(cpu, mem.Addr(cpu))
+		assert(reg.IsGeneralPurpose(), ErrRegisterGP)
+		assert(reg.width == 1, ErrRegisterSize)
+		cpu.Set16(reg, int32(mem.Addr(cpu)))
+		// FLAGS none affected
 	case OpLDS:
 	case OpLES:
 	case OpLAHF:
@@ -1696,24 +1665,44 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpPUSHF:
 	case OpPOPF:
 	case OpAddRegRm, OpAddRmImm, OpAddAccImm:
-		dst := inst.operands[0].(GetterSetter)
-		src := inst.operands[1].(Getter) // @fixme: immediate must be sign-extended to fit destination operand (make sure that this is done properly)
-		check(dst, src)
-		a := dst.Get(cpu)
-		b := src.Get(cpu)
-		r := a + b
-		dst.Set(cpu, r)
-		cpu.Flags().OF(a, b, r).SF(r).ZF(r).AF(a, b, r).CF(a, b).PF(r)
+		dst := inst.operands[0]
+		src := inst.operands[1]
+		switch {
+		default:
+			panic(ErrOperandWidthMismatch)
+		case dst.W() == 0 && src.W() == 0:
+			r := cpu.Get8(dst) + cpu.Get8(src)
+			cpu.Set8(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, r > math.MaxUint8, r > math.MaxInt8 || r < math.MinInt8)
+		case dst.W() == 1 && src.W() == 1:
+			r := cpu.Get16(dst) + cpu.Get16(src)
+			cpu.Set16(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, r > math.MaxUint16, r > math.MaxInt16 || r < math.MinInt16)
+		case dst.W() == 1 && src.W() == 0 && isImm(src):
+			r := cpu.Get16(dst) + cpu.Get8(src)
+			cpu.Set8(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, r > math.MaxUint16, r > math.MaxInt16 || r < math.MinInt16)
+		}
 	case OpAdcRegRm, OpAdcRmImm, OpAdcAccImm:
-		dst := inst.operands[0].(GetterSetter)
-		src := inst.operands[1].(Getter) // @fixme: immediate must be sign-extended to fit destination operand (make sure that this is done properly)
-		check(dst, src)
-		a := dst.Get(cpu)
-		b := src.Get(cpu)
-		c := CF(cpu.RegisterFile[RegFLAGS])
-		r := a + b + c
-		dst.Set(cpu, r)
-		cpu.Flags().OFc(a, b, c).SF(r).ZF(r).AFc(a, b, c, r).CFc(a, b, c).PF(r)
+		dst := inst.operands[0]
+		src := inst.operands[1]
+		c := int32(CF(cpu.RegisterFile[RegFLAGS]))
+		switch {
+		default:
+			panic(ErrOperandWidthMismatch)
+		case dst.W() == 0 && src.W() == 0:
+			r := cpu.Get8(dst) + cpu.Get8(src) + c
+			cpu.Set8(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, r > math.MaxUint8, r > math.MaxInt8 || r < math.MinInt8)
+		case dst.W() == 1 && src.W() == 1:
+			r := cpu.Get16(dst) + cpu.Get16(src) + c
+			cpu.Set16(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, r > math.MaxUint16, r > math.MaxInt16 || r < math.MinInt16)
+		case dst.W() == 1 && src.W() == 0 && isImm(src):
+			r := cpu.Get16(dst) + cpu.Get8(src) + c
+			cpu.Set8(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, r > math.MaxUint16, r > math.MaxInt16 || r < math.MinInt16)
+		}
 	case OpIncRm, OpIncReg:
 	case OpAAA:
 	case OpBAA:
@@ -1722,13 +1711,30 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpDecRm, OpDecReg:
 	case OpNeg:
 	case OpCmpRegRm, OpCmpRmImm, OpCmpAccImm:
-		s1 := inst.operands[0].(Getter)
-		s2 := inst.operands[1].(Getter)
-		check(s1, s2)
-		a := s1.Get(cpu)
-		b := s2.Get(cpu)
-		r := a - b
-		cpu.Flags().CF(a, b).OF(a, b, r).SF(r).ZF(r).AF(a, b, r).PF(r)
+		s1 := inst.operands[0]
+		s2 := inst.operands[1]
+		switch {
+		default:
+			panic(ErrOperandWidthMismatch)
+		case s1.W() == 0 && s2.W() == 0:
+			a := cpu.Get8(s1)
+			b := cpu.Get8(s2)
+			r := a - b
+			cpu.Set8(s1, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, a < b, r > math.MaxInt8 || r < math.MinInt8)
+		case s1.W() == 1 && s2.W() == 1:
+			a := cpu.Get8(s1)
+			b := cpu.Get8(s2)
+			r := a - b
+			cpu.Set16(s1, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, a < b, r > math.MaxInt16 || r < math.MinInt16)
+		case s1.W() == 1 && s2.W() == 0 && isImm(s2):
+			a := cpu.Get8(s1)
+			b := cpu.Get8(s2)
+			r := a - b
+			cpu.Set8(s1, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, a < b, r > math.MaxInt16 || r < math.MinInt16)
+		}
 	case OpAAS:
 	case OpDAS:
 	case OpMul:
@@ -1751,12 +1757,24 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpTestRegRm, OpTestRmImm, OpTestAccImm:
 	case OpOrRegRm, OpOrRmImm, OpOrAccImm:
 	case OpXorRegRm, OpXorRmImm, OpXorAccImm:
-		dst := inst.operands[0].(GetterSetter)
-		src := inst.operands[1].(Getter)
-		check(dst, src)
-		r := dst.Get(cpu) ^ src.Get(cpu)
-		dst.Set(cpu, r)
-		cpu.Flags().OF(0, 0, 0).CF(0, 0).SF(r).ZF(r).PF(r)
+		dst := inst.operands[0]
+		src := inst.operands[1]
+		switch {
+		default:
+			panic(ErrOperandWidthMismatch)
+		case dst.W() == 0 && src.W() == 0:
+			r := cpu.Get8(dst) ^ cpu.Get8(src)
+			cpu.Set8(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
+		case dst.W() == 1 && src.W() == 1:
+			r := cpu.Get16(dst) ^ cpu.Get16(src)
+			cpu.Set16(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
+		case dst.W() == 1 && src.W() == 0 && isImm(src):
+			r := cpu.Get16(dst) ^ cpu.Get8(src)
+			cpu.Set8(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
+		}
 	case OpRep:
 	case OpMovsb:
 	case OpCmpsb:
