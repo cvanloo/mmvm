@@ -622,9 +622,9 @@ func (iswma InstructionFormatterWithMemoryAccess) String() string {
 				default:
 					panic(fmt.Errorf("invalid width: ", m.width))
 				case 0:
-					return fmt.Sprintf("%s ;[%04x]%04x", iswma.inst, m.Addr(iswma.cpu), iswma.cpu.Get8(m))
+					return fmt.Sprintf("%s ;[%04x]%04x", iswma.inst, m.Addr(iswma.cpu), uint8(iswma.cpu.Get8(m)))
 				case 1:
-					return fmt.Sprintf("%s ;[%04x]%04x", iswma.inst, m.Addr(iswma.cpu), iswma.cpu.Get16(m))
+					return fmt.Sprintf("%s ;[%04x]%04x", iswma.inst, m.Addr(iswma.cpu), uint16(iswma.cpu.Get16(m)))
 				}
 			//@todo: case Address:
 			}
