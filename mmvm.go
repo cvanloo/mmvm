@@ -1831,6 +1831,17 @@ func (cpu *CPU) Step(inst Instruction) {
 		}
 	case OpSsbRegRm, OpSsbRmImm, OpSsbAccImm:
 	case OpDecRm, OpDecReg:
+		dst := inst.operands[0]
+		switch dst.W() {
+		case 0:
+			r := cpu.Get8(dst) - 1
+			cpu.Set8(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, CF(cpu.RegisterFile[RegFLAGS]) == 1, r > math.MaxInt8 || r < math.MinInt8)
+		case 1:
+			r := cpu.Get16(dst) - 1
+			cpu.Set16(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, CF(cpu.RegisterFile[RegFLAGS]) == 1, r > math.MaxInt16 || r < math.MinInt16)
+		}
 	case OpNeg:
 	case OpCmpRegRm, OpCmpRmImm, OpCmpAccImm:
 		s1 := inst.operands[0]
