@@ -1661,36 +1661,41 @@ func (cpu *CPU) Step(inst Instruction) {
 	intVector := map[int32]func(*CPU){
 		0x20: func(cpu *CPU) { // syscall
 			sysVector := [78]func(*CPU) uint16 {
-				0: func(*CPU) uint16 {
+				0: func(*CPU) uint16 { // no_sys
 					return uint16(EINVAL)
 				},
-				1: func(*CPU) uint16 {
-					panic("not implemented")
-				},
-				4: func(*CPU) uint16 {
+				1: func(*CPU) uint16 { // exit
 					type Msg struct {
-						source, type_ uint16
-						i1, i2, i3, p1, p2, p3 uint16 
+						source, type_, code uint16
 					}
 					addr := cpu.RegisterFile[RegB]
 					bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
 					msg := (*Msg)(unsafe.Pointer(&bs[0]))
-					{
-						fd := msg.i1
-						addr := msg.p1
-						count := msg.i2
-						if *m {
-							fmt.Printf("<write(%d, 0x%04x, %d)", fd, addr, count)
-						}
-						str := string(cpu.Data[addr:addr+count])
-						fmt.Print(str)
-						ret := len(str)
-						if *m {
-							fmt.Printf(" => %d>\n", ret)
-						}
-						cpu.RegisterFile[RegA] = 0 // ?
-						return uint16(ret)
+					if *m {
+						fmt.Printf("<exit(%d)>\n", msg.code)
 					}
+					os.Exit(int(msg.code))
+					return msg.code
+				},
+				4: func(*CPU) uint16 { // write
+					type Msg struct {
+						source, type_ uint16
+						fd, len, _, addr uint16 
+					}
+					addr := cpu.RegisterFile[RegB]
+					bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
+					msg := (*Msg)(unsafe.Pointer(&bs[0]))
+					if *m {
+						fmt.Printf("<write(%d, 0x%04x, %d)", msg.fd, msg.addr, msg.len)
+					}
+					str := string(cpu.Data[msg.addr:msg.addr+msg.len])
+					fmt.Print(str)
+					ret := len(str)
+					if *m {
+						fmt.Printf(" => %d>\n", ret)
+					}
+					cpu.RegisterFile[RegA] = 0 // ?
+					return uint16(ret)
 				},
 			}
 			type Msg struct {
