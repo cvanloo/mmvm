@@ -1947,6 +1947,11 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpJmpDirInterSeg:
 	case OpJmpIndirInterSeg:
 	case OpRetSeg:
+		addr := cpu.Data.Read16(cpu.RegisterFile[RegSP])
+		cpu.RegisterFile[RegSP] += 2
+		cpu.RegisterFile[RegIP] = addr
+		return // don't increment IP
+		// FLAGS none affected
 	case OpRetSegImm:
 	case OpRetInterSeg:
 	case OpRetInterSegImm:
