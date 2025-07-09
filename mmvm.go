@@ -1702,9 +1702,9 @@ func (cpu *CPU) Step(inst Instruction) {
 						source uint16
 						type_ uint16
 						fd uint16
-						_ uint16
+						_ [2]byte
 						request uint16
-						_, _, _, _ uint16
+						_ [8]byte
 						address uint16
 					}
 					addr := cpu.RegisterFile[RegB]
