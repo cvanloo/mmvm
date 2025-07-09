@@ -1822,16 +1822,16 @@ func (cpu *CPU) Step(inst Instruction) {
 			cpu.Set8(s1, r)
 			cpu.Flags().SetZSCO(r == 0, r < 0, uint16(a) < uint16(b), r > math.MaxInt8 || r < math.MinInt8)
 		case s1.W() == 1 && s2.W() == 1:
-			a := cpu.Get8(s1)
-			b := cpu.Get8(s2)
+			a := cpu.Get16(s1)
+			b := cpu.Get16(s2)
 			r := a - b
 			cpu.Set16(s1, r)
 			cpu.Flags().SetZSCO(r == 0, r < 0, uint16(a) < uint16(b), r > math.MaxInt16 || r < math.MinInt16)
 		case s1.W() == 1 && s2.W() == 0 && isImm(s2):
-			a := cpu.Get8(s1)
+			a := cpu.Get16(s1)
 			b := cpu.Get8(s2)
 			r := a - b
-			cpu.Set8(s1, r)
+			cpu.Set16(s1, r)
 			cpu.Flags().SetZSCO(r == 0, r < 0, uint16(a) < uint16(b), r > math.MaxInt16 || r < math.MinInt16)
 		}
 	case OpSsbRegRm, OpSsbRmImm, OpSsbAccImm:
@@ -1860,12 +1860,12 @@ func (cpu *CPU) Step(inst Instruction) {
 			r := a - b
 			cpu.Flags().SetZSCO(r == 0, r < 0, uint16(a) < uint16(b), r > math.MaxInt8 || r < math.MinInt8)
 		case s1.W() == 1 && s2.W() == 1:
-			a := cpu.Get8(s1)
-			b := cpu.Get8(s2)
+			a := cpu.Get16(s1)
+			b := cpu.Get16(s2)
 			r := a - b
 			cpu.Flags().SetZSCO(r == 0, r < 0, uint16(a) < uint16(b), r > math.MaxInt16 || r < math.MinInt16)
 		case s1.W() == 1 && s2.W() == 0 && isImm(s2):
-			a := cpu.Get8(s1)
+			a := cpu.Get16(s1)
 			b := cpu.Get8(s2)
 			r := a - b
 			cpu.Flags().SetZSCO(r == 0, r < 0, uint16(a) < uint16(b), r > math.MaxInt16 || r < math.MinInt16)
