@@ -12,7 +12,7 @@ fi
 
 function run_diff {
     if [[ $LIMIT > 0 ]]; then
-        ./mmvm "$MODE" -n $LIMIT "$1" > mine.disas
+        ./mmvm "$MODE" -n $LIMIT "$1" 2>&1 > mine.disas
         mmvm "$MODE" "$1" 2>&1 | head -n $((LIMIT+1)) > other.disas 
     else
         ./mmvm "$MODE" "$1" > mine.disas
@@ -33,7 +33,7 @@ if [[ "$1" == "all" ]]; then
             echo "$d"
         fi
     done
-    exit "$st"
+    exit $st
 else
     A="${A:-a.out}"
     d=$(run_diff $A)
