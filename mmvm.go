@@ -1451,8 +1451,8 @@ func (r *RAM) WriteZeros(addr uint16, count uint16) {
 }
 
 func (r *RAM) Write16(addr uint16, val uint16) {
-	r[addr] = byte(val >> 8)
-	r[addr+1] = byte(val)
+	r[addr+1] = byte(val >> 8)
+	r[addr+0] = byte(val >> 0)
 }
 
 func flagExtract(offset byte) func(uint16) uint16 {
@@ -1513,7 +1513,8 @@ func (cpu *CPU) Get16(opnd Operand) int32 {
 		return int32(int16(cpu.RegisterFile[o.name]))
 	case Memory:
 		addr := o.Addr(cpu)
-		return int32((int16(cpu.Data[addr]) << 8) | int16(cpu.Data[addr+1]))
+		//return int32((int16(cpu.Data[addr]) << 8) | int16(cpu.Data[addr+1]))
+		return int32((int16(cpu.Data[addr+1]) << 8) | int16(cpu.Data[addr]))
 	case Immediate:
 		return int32(int16(o.value))
 	case SignedImmediate:
@@ -1542,8 +1543,8 @@ func (cpu *CPU) Set16(opnd Operand, val int32) {
 		cpu.RegisterFile[o.name] = uint16(val)
 	case Memory:
 		addr := o.Addr(cpu)
-		cpu.Data[addr+0] = byte(val >> 8)
-		cpu.Data[addr+1] = byte(val >> 0)
+		cpu.Data[addr+1] = byte(val >> 8)
+		cpu.Data[addr+0] = byte(val >> 0)
 	}
 }
 
