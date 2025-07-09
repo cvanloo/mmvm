@@ -1767,12 +1767,12 @@ func (cpu *CPU) Step(inst Instruction) {
 			cpu.RegisterFile[RegSP] += 2
 		}
 		// FLAGS none affected
-	case OpXchgRmReg, OpXchgAccReg:
-	case OpInFixedPort:
-	case OpInVarPort:
-	case OpOutFixedPort:
-	case OpOutVarPort:
-	case OpXLAT:
+	//case OpXchgRmReg, OpXchgAccReg:
+	//case OpInFixedPort:
+	//case OpInVarPort:
+	//case OpOutFixedPort:
+	//case OpOutVarPort:
+	//case OpXLAT:
 	case OpLEA:
 		reg := inst.operands[0].(Register)
 		mem := inst.operands[1].(Memory)
@@ -1780,12 +1780,12 @@ func (cpu *CPU) Step(inst Instruction) {
 		assert(reg.width == 1, ErrRegisterSize)
 		cpu.Set16(reg, int32(mem.Addr(cpu)))
 		// FLAGS none affected
-	case OpLDS:
-	case OpLES:
-	case OpLAHF:
-	case OpSAHF:
-	case OpPUSHF:
-	case OpPOPF:
+	//case OpLDS:
+	//case OpLES:
+	//case OpLAHF:
+	//case OpSAHF:
+	//case OpPUSHF:
+	//case OpPOPF:
 	case OpAddRegRm, OpAddRmImm, OpAddAccImm:
 		dst := inst.operands[0]
 		src := inst.operands[1]
@@ -1837,8 +1837,8 @@ func (cpu *CPU) Step(inst Instruction) {
 			cpu.Set16(dst, r)
 			cpu.Flags().SetZSCO(r == 0, r < 0, CF(cpu.RegisterFile[RegFLAGS]) == 1, r > math.MaxInt16 || r < math.MinInt16)
 		}
-	case OpAAA:
-	case OpBAA:
+	//case OpAAA:
+	//case OpBAA:
 	case OpSubRegRm, OpSubRmImm, OpSubAccImm:
 		s1 := inst.operands[0]
 		s2 := inst.operands[1]
@@ -1864,7 +1864,7 @@ func (cpu *CPU) Step(inst Instruction) {
 			cpu.Set16(s1, r)
 			cpu.Flags().SetZSCO(r == 0, r < 0, uint16(a) < uint16(b), r > math.MaxInt16 || r < math.MinInt16)
 		}
-	case OpSsbRegRm, OpSsbRmImm, OpSsbAccImm:
+	//case OpSsbRegRm, OpSsbRmImm, OpSsbAccImm:
 	case OpDecRm, OpDecReg:
 		dst := inst.operands[0]
 		switch dst.W() {
@@ -1877,7 +1877,7 @@ func (cpu *CPU) Step(inst Instruction) {
 			cpu.Set16(dst, r)
 			cpu.Flags().SetZSCO(r == 0, r < 0, CF(cpu.RegisterFile[RegFLAGS]) == 1, r > math.MaxInt16 || r < math.MinInt16)
 		}
-	case OpNeg:
+	//case OpNeg:
 	case OpCmpRegRm, OpCmpRmImm, OpCmpAccImm:
 		s1 := inst.operands[0]
 		s2 := inst.operands[1]
@@ -1900,24 +1900,27 @@ func (cpu *CPU) Step(inst Instruction) {
 			r := a - b
 			cpu.Flags().SetZSCO(r == 0, r < 0, uint16(a) < uint16(b), r > math.MaxInt16 || r < math.MinInt16)
 		}
-	case OpAAS:
-	case OpDAS:
-	case OpMul:
-	case OpImul:
-	case OpAAM:
-	case OpDiv:
-	case OpIdiv:
-	case OpAAD:
+	//case OpAAS:
+	//case OpDAS:
+	//case OpMul:
+	//case OpImul:
+	//case OpAAM:
+	//case OpDiv:
+	//case OpIdiv:
+	//case OpAAD:
 	case OpCBW:
-	case OpCWD:
-	case OpNot:
-	case OpShlSal:
-	case OpShr:
-	case OpSar:
-	case OpRol:
-	case OpRor:
-	case OpRcl:
-	case OpRcr:
+		al := int8(cpu.RegisterFile[RegA])
+		cpu.RegisterFile[RegA] = uint16(int16(al))
+		// FLAGS none affected
+	//case OpCWD:
+	//case OpNot:
+	//case OpShlSal:
+	//case OpShr:
+	//case OpSar:
+	//case OpRol:
+	//case OpRor:
+	//case OpRcl:
+	//case OpRcr:
 	case OpAndRegRm, OpAndRmImm, OpAndAccImm:
 		dst := inst.operands[0]
 		src := inst.operands[1]
@@ -1997,17 +2000,17 @@ func (cpu *CPU) Step(inst Instruction) {
 			cpu.Set8(dst, r)
 			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
 		}
-	case OpRep:
-	case OpMovsb:
-	case OpCmpsb:
-	case OpScasb:
-	case OpLodsb:
-	case OpStosb:
-	case OpMovsw:
-	case OpCmpsw:
-	case OpScasw:
-	case OpLodsw:
-	case OpStosw:
+	//case OpRep:
+	//case OpMovsb:
+	//case OpCmpsb:
+	//case OpScasb:
+	//case OpLodsb:
+	//case OpStosb:
+	//case OpMovsw:
+	//case OpCmpsw:
+	//case OpScasw:
+	//case OpLodsw:
+	//case OpStosw:
 	case OpCallDirSeg:
 		cpu.RegisterFile[RegSP] -= 2
 		cpu.Data.Write16(cpu.RegisterFile[RegSP], uint16(inst.offset + inst.size))
@@ -2016,28 +2019,27 @@ func (cpu *CPU) Step(inst Instruction) {
 		cpu.RegisterFile[RegIP] = addr
 		return // don't increment IP
 		// FLAGS none affected
-	case OpCallIndirSeg:
-	case OpCallDirInterSeg:
-	case OpCallIndirInterSeg:
-	case OpJmpDirSeg:
+	//case OpCallIndirSeg:
+	//case OpCallDirInterSeg:
+	//case OpCallIndirInterSeg:
+	case OpJmpDirSeg, OpJmpShortDirSeg:
 		arg := inst.operands[0]
 		addr := uint16(cpu.Get16(arg))
 		cpu.RegisterFile[RegIP] = addr
 		return // don't increment IP
 		// FLAGS none affected
-	case OpJmpShortDirSeg:
-	case OpJmpIndirSeg:
-	case OpJmpDirInterSeg:
-	case OpJmpIndirInterSeg:
+	//case OpJmpIndirSeg:
+	//case OpJmpDirInterSeg:
+	//case OpJmpIndirInterSeg:
 	case OpRetSeg:
 		addr := cpu.Data.Read16(cpu.RegisterFile[RegSP])
 		cpu.RegisterFile[RegSP] += 2
 		cpu.RegisterFile[RegIP] = addr
 		return // don't increment IP
 		// FLAGS none affected
-	case OpRetSegImm:
-	case OpRetInterSeg:
-	case OpRetInterSegImm:
+	//case OpRetSegImm:
+	//case OpRetInterSeg:
+	//case OpRetInterSegImm:
 	case OpJe:
 		if ZF(cpu.RegisterFile[RegFLAGS]) == 1 {
 			arg := inst.operands[0]
@@ -2054,12 +2056,12 @@ func (cpu *CPU) Step(inst Instruction) {
 			return // don't increment IP
 		}
 		// FLAGS none affected
-	case OpJle:
-	case OpJb:
-	case OpJbe:
-	case OpJp:
-	case OpJo:
-	case OpJs:
+	//case OpJle:
+	//case OpJb:
+	//case OpJbe:
+	//case OpJp:
+	//case OpJo:
+	//case OpJs:
 	case OpJne:
 		if ZF(cpu.RegisterFile[RegFLAGS]) == 0 {
 			arg := inst.operands[0]
@@ -2076,16 +2078,23 @@ func (cpu *CPU) Step(inst Instruction) {
 			return // don't increment IP
 		}
 		// FLAGS none affected
-	case OpJnle:
+	//case OpJnle:
 	case OpJnb:
-	case OpJnbe:
-	case OpJnp:
-	case OpJno:
-	case OpJns:
-	case OpLoop:
-	case OpLoopz:
-	case OpLoopnz:
-	case OpJcxz:
+		if CF(cpu.RegisterFile[RegFLAGS]) == 0 {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
+	//case OpJnbe:
+	//case OpJnp:
+	//case OpJno:
+	//case OpJns:
+	//case OpLoop:
+	//case OpLoopz:
+	//case OpLoopnz:
+	//case OpJcxz:
 	case OpIntType3:
 		intVector[3](cpu)
 		// FLAGS none affected
@@ -2094,19 +2103,19 @@ func (cpu *CPU) Step(inst Instruction) {
 		v := cpu.Get8(t)
 		intVector[v](cpu)
 		// FLAGS none affected
-	case OpInto:
-	case OpIret:
-	case OpClc:
-	case OpCmc:
-	case OpStc:
-	case OpCld:
-	case OpStd:
-	case OpCli:
-	case OpSti:
-	case OpHlt:
-	case OpWait:
-	case OpEsc:
-	case OpLock:
+	//case OpInto:
+	//case OpIret:
+	//case OpClc:
+	//case OpCmc:
+	//case OpStc:
+	//case OpCld:
+	//case OpStd:
+	//case OpCli:
+	//case OpSti:
+	//case OpHlt:
+	//case OpWait:
+	//case OpEsc:
+	//case OpLock:
 	}
 	cpu.RegisterFile[RegIP] += uint16(inst.size)
 }
