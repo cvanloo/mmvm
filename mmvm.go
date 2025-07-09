@@ -1664,7 +1664,7 @@ func (cpu *CPU) Step(inst Instruction) {
 				0: func(*CPU) uint16 { // no_sys
 					return uint16(EINVAL)
 				},
-				1: func(*CPU) uint16 { // exit
+				1: func(cpu *CPU) uint16 { // exit
 					type Msg struct {
 						source, type_, code uint16
 					}
@@ -1677,7 +1677,7 @@ func (cpu *CPU) Step(inst Instruction) {
 					os.Exit(int(msg.code))
 					return msg.code
 				},
-				4: func(*CPU) uint16 { // write
+				4: func(cpu *CPU) uint16 { // write
 					type Msg struct {
 						source, type_ uint16
 						fd, len, _, addr uint16 
@@ -1696,6 +1696,25 @@ func (cpu *CPU) Step(inst Instruction) {
 					}
 					cpu.RegisterFile[RegA] = 0 // ?
 					return uint16(ret)
+				},
+				54: func(cpu *CPU) uint16 { // ioctl
+					type Msg struct {
+						source uint16
+						type_ uint16
+						fd uint16
+						_ uint16
+						request uint16
+						_ uint64
+						address uint16
+					}
+					addr := cpu.RegisterFile[RegB]
+					bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
+					msg := (*Msg)(unsafe.Pointer(&bs[0]))
+					if *m {
+						fmt.Printf("<ioctl(%d, 0x%04x, 0x%04x)>\n", msg.fd, msg.request, msg.address)
+					}
+					cpu.RegisterFile[RegA] = 0 // ?
+					return uint16(EINVAL)
 				},
 			}
 			type Msg struct {
