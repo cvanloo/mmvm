@@ -13,6 +13,7 @@ import (
 	"flag"
 	"runtime"
 	"math"
+	"iter"
 )
 
 // @todo: https://www.muppetlabs.com/~breadbox/txt/mopb.html
@@ -1661,11 +1662,9 @@ func (cpu *CPU) Step(inst Instruction) {
 		default:
 			panic(ErrOperandWidthMismatch)
 		case dst.W() == 0 && src.W() == 0:
-			r := cpu.Get8(dst) + cpu.Get8(src)
-			cpu.Set8(dst, r)
+			cpu.Set8(dst, cpu.Get8(src))
 		case dst.W() == 1 && src.W() == 1:
-			r := cpu.Get16(dst) + cpu.Get16(src)
-			cpu.Set16(dst, r)
+			cpu.Set16(dst, cpu.Get16(src))
 		}
 		// FLAGS none affected
 	case OpPushRm, OpPushReg, OpPushSeg:
@@ -1732,10 +1731,6 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpAAA:
 	case OpBAA:
 	case OpSubRegRm, OpSubRmImm, OpSubAccImm:
-	case OpSsbRegRm, OpSsbRmImm, OpSsbAccImm:
-	case OpDecRm, OpDecReg:
-	case OpNeg:
-	case OpCmpRegRm, OpCmpRmImm, OpCmpAccImm:
 		s1 := inst.operands[0]
 		s2 := inst.operands[1]
 		switch {
@@ -1758,6 +1753,31 @@ func (cpu *CPU) Step(inst Instruction) {
 			b := cpu.Get8(s2)
 			r := a - b
 			cpu.Set8(s1, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, a < b, r > math.MaxInt16 || r < math.MinInt16)
+		}
+	case OpSsbRegRm, OpSsbRmImm, OpSsbAccImm:
+	case OpDecRm, OpDecReg:
+	case OpNeg:
+	case OpCmpRegRm, OpCmpRmImm, OpCmpAccImm:
+		s1 := inst.operands[0]
+		s2 := inst.operands[1]
+		switch {
+		default:
+			panic(ErrOperandWidthMismatch)
+		case s1.W() == 0 && s2.W() == 0:
+			a := cpu.Get8(s1)
+			b := cpu.Get8(s2)
+			r := a - b
+			cpu.Flags().SetZSCO(r == 0, r < 0, a < b, r > math.MaxInt8 || r < math.MinInt8)
+		case s1.W() == 1 && s2.W() == 1:
+			a := cpu.Get8(s1)
+			b := cpu.Get8(s2)
+			r := a - b
+			cpu.Flags().SetZSCO(r == 0, r < 0, a < b, r > math.MaxInt16 || r < math.MinInt16)
+		case s1.W() == 1 && s2.W() == 0 && isImm(s2):
+			a := cpu.Get8(s1)
+			b := cpu.Get8(s2)
+			r := a - b
 			cpu.Flags().SetZSCO(r == 0, r < 0, a < b, r > math.MaxInt16 || r < math.MinInt16)
 		}
 	case OpAAS:
@@ -1947,8 +1967,20 @@ func emulate(exec Exec, name string, bin []byte, debug bool) error {
 	if debug {
 		fmt.Println(" AX   BX   CX   DX   SP   BP   SI   DI  FLAGS IP")
 	}
-	//for {
-	for range 10 {
+	limiter := func(n int) iter.Seq[int] {
+		return func(yield func(int) bool) {
+			if n == 0 {
+				i := 0
+				for yield(i) {
+					i++
+				}
+			} else {
+				for i := 0; i < n && yield(i); i++ {
+				}
+			}
+		}
+	}
+	for range limiter(*n) {
 		src := cpu.Fetch()
 		inst, err := cpu.Decode(src)
 		if err != nil {
@@ -1979,10 +2011,11 @@ func must[T any](t T, err error) T {
 
 var d = flag.Bool("d", false, "disassemble")
 var m = flag.Bool("m", false, "debug")
+var n = flag.Int("n", 0, "stop executing after n instructions")
 
 func init() {
 	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [-d|-m] a.out\n", os.Args[0])
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [-d|-m|-n] a.out\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
