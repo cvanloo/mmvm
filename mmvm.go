@@ -1425,35 +1425,34 @@ func disassemble(text []byte) (insts []Instruction, disasErr error) {
 type (
 	CPU struct {
 		RegisterFile [10]uint16
-		Memory RAM
+		Text RAM
+		Data RAM
 		ProgramBreak uint16
 	}
 	Flags struct {
 		reg *uint16
 	}
-	RAM struct {
-		Data [1<<32]byte
-	}
+	RAM [1<<32]byte
 )
 
 func (r *RAM) WriteBytes(addr uint16, val []byte) {
-	copy(r.Data[addr:addr+uint16(len(val))], val)
+	copy(r[addr:addr+uint16(len(val))], val)
 }
 
 func (r *RAM) WriteString(addr uint16, val string) {
-	copy(r.Data[addr:addr+uint16(len(val))], val[:])
-	r.Data[addr+uint16(len(val))] = 0
+	copy(r[addr:addr+uint16(len(val))], val[:])
+	r[addr+uint16(len(val))] = 0
 }
 
 func (r *RAM) WriteZeros(addr uint16, count uint16) {
 	for i := range count {
-		r.Data[addr+i] = 0
+		r[addr+i] = 0
 	}
 }
 
 func (r *RAM) Write16(addr uint16, val uint16) {
-	r.Data[addr] = byte(val >> 8)
-	r.Data[addr+1] = byte(val)
+	r[addr] = byte(val >> 8)
+	r[addr+1] = byte(val)
 }
 
 func flagExtract(offset byte) func(uint16) uint16 {
@@ -1498,7 +1497,7 @@ func (cpu *CPU) Get8(opnd Operand) int32 {
 		return int32(int8(cpu.RegisterFile[o.name]))
 	case Memory:
 		addr := o.Addr(cpu)
-		return int32(int8(cpu.Memory.Data[addr]))
+		return int32(int8(cpu.Data[addr]))
 	case Immediate:
 		return int32(int8(o.value))
 	case SignedImmediate:
@@ -1514,7 +1513,7 @@ func (cpu *CPU) Get16(opnd Operand) int32 {
 		return int32(int16(cpu.RegisterFile[o.name]))
 	case Memory:
 		addr := o.Addr(cpu)
-		return int32((int16(cpu.Memory.Data[addr]) << 8) | int16(cpu.Memory.Data[addr+1]))
+		return int32((int16(cpu.Data[addr]) << 8) | int16(cpu.Data[addr+1]))
 	case Immediate:
 		return int32(int16(o.value))
 	case SignedImmediate:
@@ -1531,7 +1530,7 @@ func (cpu *CPU) Set8(opnd Operand, val int32) {
 		cpu.RegisterFile[o.name] = uint16(uint8(val))
 	case Memory:
 		addr := o.Addr(cpu)
-		cpu.Memory.Data[addr] = byte(val)
+		cpu.Data[addr] = byte(val)
 	}
 }
 
@@ -1543,8 +1542,8 @@ func (cpu *CPU) Set16(opnd Operand, val int32) {
 		cpu.RegisterFile[o.name] = uint16(val)
 	case Memory:
 		addr := o.Addr(cpu)
-		cpu.Memory.Data[addr+0] = byte(val >> 8)
-		cpu.Memory.Data[addr+1] = byte(val >> 0)
+		cpu.Data[addr+0] = byte(val >> 8)
+		cpu.Data[addr+1] = byte(val >> 0)
 	}
 }
 
@@ -1622,7 +1621,7 @@ func (cpu *CPU) String() string {
 
 func (cpu *CPU) Fetch() *Source {
 	return &Source{
-		Text: cpu.Memory.Data[:],
+		Text: cpu.Text[:],
 		Consumed: int(cpu.RegisterFile[RegIP]),
 		Pos: int(cpu.RegisterFile[RegIP]),
 	}
@@ -1927,24 +1926,24 @@ func (cpu *CPU) execve(argv, envp []string) {
 	frame := cpu.RegisterFile[RegSP]
 	// padding for alignment if necessary
 	if (frame - totalLen) % 2 != 0 {
-		frame -= 1; cpu.Memory.WriteZeros(frame, 1)
+		frame -= 1; cpu.Data.WriteZeros(frame, 1)
 	}
 	//fmt.Printf("totalLen: %d, frameStart: %04x\n", totalLen, frame - totalLen)
 	addrs := make([]uint16, len(argv) + len(envp))
 	for i, s := range slices.Concat(envp, argv) {
 		frame -= uint16(len(s)) + 1
-		cpu.Memory.WriteString(frame, s)
+		cpu.Data.WriteString(frame, s)
 		addrs[i] = frame
 	}
-	frame -= 2; cpu.Memory.Write16(frame, 0)
+	frame -= 2; cpu.Data.Write16(frame, 0)
 	for _, p := range addrs[:len(envp)] {
-		frame -= 2; cpu.Memory.Write16(frame, p)
+		frame -= 2; cpu.Data.Write16(frame, p)
 	}
-	frame -= 2; cpu.Memory.Write16(frame, 0)
+	frame -= 2; cpu.Data.Write16(frame, 0)
 	for _, p := range addrs[len(envp):] {
-		frame -= 2; cpu.Memory.Write16(frame, p)
+		frame -= 2; cpu.Data.Write16(frame, p)
 	}
-	frame -= 2; cpu.Memory.Write16(frame, uint16(len(argv)))
+	frame -= 2; cpu.Data.Write16(frame, uint16(len(argv)))
 	cpu.RegisterFile[RegSP] = frame
 }
 
@@ -1979,10 +1978,10 @@ func emulate(exec Exec, name string, bin []byte, debug bool) error {
 	 */
 	text := exec.Text(bin)
 	data := exec.Data(bin)
+	cpu.Text.WriteBytes(0, text)
 	off := uint16(0)
-	cpu.Memory.WriteBytes(off, text); off += uint16(len(text))
-	cpu.Memory.WriteBytes(off, data); off += uint16(len(data))
-	cpu.Memory.WriteZeros(off, uint16(exec.SizeBSS)); off += uint16(exec.SizeBSS)
+	cpu.Data.WriteBytes(off, data); off += uint16(len(data))
+	cpu.Data.WriteZeros(off, uint16(exec.SizeBSS)); off += uint16(exec.SizeBSS)
 	// @todo: allocate symbols
 	cpu.RegisterFile[RegIP] = uint16(exec.EntryPoint)
 	if debug {
