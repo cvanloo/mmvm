@@ -1,7 +1,7 @@
 package main
 
 import (
-	//"unsafe"
+	"unsafe"
 	"fmt"
 	"os"
 	"slices"
@@ -995,6 +995,7 @@ func decode(src *Source) (inst Instruction, err error) {
 		opn = Operands{Immediate{width: 0, value: uint16(src.Next())}}
 	case i1 == 0b11001100: // int 3
 		op = OpIntType3
+		// @todo: we could merge this together with OpIntTypeSpecified
 	case i1 == 0b11001011: // ret ???
 		op = OpRetInterSeg
 	case i1 == 0b11001010: // ret @fixme: ???
@@ -1455,6 +1456,14 @@ func (r *RAM) Write16(addr uint16, val uint16) {
 	r[addr+0] = byte(val >> 0)
 }
 
+func (r *RAM) Read8(addr uint16) uint8 {
+	return r[addr]
+}
+
+func (r *RAM) Read16(addr uint16) uint16 {
+	return (uint16(r[addr+1]) << 8) | uint16(r[addr])
+}
+
 func flagExtract(offset byte) func(uint16) uint16 {
 	return func(flags uint16) uint16 {
 		return (flags >> offset) & 1
@@ -1649,6 +1658,50 @@ func (cpu *CPU) Step(inst Instruction) {
 			// @todo: or SignedImmediate
 		}
 	}
+	intVector := map[int32]func(*CPU){
+		0x20: func(cpu *CPU) { // syscall
+			sysVector := [78]func(*CPU) uint16 {
+				0: func(*CPU) uint16 {
+					return uint16(EINVAL)
+				},
+				1: func(*CPU) uint16 {
+					panic("not implemented")
+				},
+				4: func(*CPU) uint16 {
+					type Msg struct {
+						source, type_ uint16
+						i1, i2, i3, p1, p2, p3 uint16 
+					}
+					addr := cpu.RegisterFile[RegB]
+					bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
+					msg := (*Msg)(unsafe.Pointer(&bs[0]))
+					{
+						fd := msg.i1
+						addr := msg.p1
+						count := msg.i2
+						if *m {
+							fmt.Printf("<write(%d, 0x%04x, %d)", fd, addr, count)
+						}
+						str := string(cpu.Data[addr:addr+count])
+						fmt.Print(str)
+						ret := len(str)
+						if *m {
+							fmt.Printf(" => %d>\n", ret)
+						}
+					}
+					return 0
+				},
+			}
+			type Msg struct {
+				source, type_ uint16
+			}
+			addr := cpu.RegisterFile[RegB]
+			bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
+			msg := (*Msg)(unsafe.Pointer(&bs[0]))
+			ret := sysVector[msg.type_](cpu)
+			cpu.RegisterFile[RegA] = ret
+		},
+	}
 	switch inst.operation {
 	default:
 		fallthrough
@@ -1677,6 +1730,18 @@ func (cpu *CPU) Step(inst Instruction) {
 		}
 		// FLAGS none affected
 	case OpPopRm, OpPopReg, OpPopSeg:
+		dst := inst.operands[0]
+		switch dst.W() {
+		case 0:
+			val := int32(cpu.Data.Read8(cpu.RegisterFile[RegSP]))
+			cpu.Set8(dst, val)
+			cpu.RegisterFile[RegSP] += 1
+		case 1:
+			val := int32(cpu.Data.Read16(cpu.RegisterFile[RegSP]))
+			cpu.Set16(dst, val)
+			cpu.RegisterFile[RegSP] += 2
+		}
+		// FLAGS none affected
 	case OpXchgRmReg, OpXchgAccReg:
 	case OpInFixedPort:
 	case OpInVarPort:
@@ -1906,7 +1971,13 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpLoopnz:
 	case OpJcxz:
 	case OpIntType3:
+		intVector[3](cpu)
+		// FLAGS none affected
 	case OpIntTypeSpecified:
+		t := inst.operands[0]
+		v := cpu.Get8(t)
+		intVector[v](cpu)
+		// FLAGS none affected
 	case OpInto:
 	case OpIret:
 	case OpClc:
@@ -1928,14 +1999,18 @@ var (
 	ErrHaltAndCatchFire = errors.New("halted and on fire")
 )
 
-type MinixError string
+type MinixError int
 
 func (err MinixError) Error() string {
-	return "minix: " + string(err)
+	return "minix: " + map[int]string{
+		7: "argument list too long",
+		22: "invalid argument",
+	}[int(err)]
 }
 
 var (
-	E2BIG = MinixError("argument list too long")
+	E2BIG = MinixError(7)
+	EINVAL = MinixError(22)
 )
 
 func (cpu *CPU) execve(argv, envp []string) {
@@ -2075,6 +2150,7 @@ func main() {
 		log.Fatal(err)
 	}
 	//fmt.Printf("%#v\n", exec)
+	//fmt.Printf("%x\n", exec.Data(bin))
 	if exec.BadMag() {
 		log.Fatal("bad magic")
 	}
