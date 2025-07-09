@@ -12,13 +12,14 @@ fi
 
 function run_diff {
     if [[ $LIMIT > 0 ]]; then
-        ./mmvm "$MODE" -n $((LIMIT-1)) "$1" > mine.disas
-        mmvm "$MODE" "$1" 2>&1 | head -n $LIMIT > other.disas 
+        ./mmvm "$MODE" -n $LIMIT "$1" > mine.disas
+        mmvm "$MODE" "$1" 2>&1 | head -n $((LIMIT+1)) > other.disas 
     else
         ./mmvm "$MODE" "$1" > mine.disas
         mmvm "$MODE" "$1" > other.disas 2>&1
     fi
-    local d=$(diff --suppress-common-lines mine.disas other.disas)
+    #local d=$(diff --suppress-common-lines mine.disas other.disas)
+    local d=$(diff mine.disas other.disas)
     echo "$d"
 }
 
