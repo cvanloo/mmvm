@@ -1513,7 +1513,6 @@ func (cpu *CPU) Get16(opnd Operand) int32 {
 		return int32(int16(cpu.RegisterFile[o.name]))
 	case Memory:
 		addr := o.Addr(cpu)
-		//return int32((int16(cpu.Data[addr]) << 8) | int16(cpu.Data[addr+1]))
 		return int32((int16(cpu.Data[addr+1]) << 8) | int16(cpu.Data[addr]))
 	case Immediate:
 		return int32(int16(o.value))
@@ -1862,6 +1861,13 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpLodsw:
 	case OpStosw:
 	case OpCallDirSeg:
+		cpu.RegisterFile[RegSP] -= 2
+		cpu.Data.Write16(cpu.RegisterFile[RegSP], uint16(inst.offset + inst.size))
+		arg := inst.operands[0]
+		addr := uint16(cpu.Get16(arg))
+		cpu.RegisterFile[RegIP] = addr
+		return // don't increment IP
+		// FLAGS none affected
 	case OpCallIndirSeg:
 	case OpCallDirInterSeg:
 	case OpCallIndirInterSeg:
