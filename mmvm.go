@@ -1667,6 +1667,15 @@ func (cpu *CPU) Step(inst Instruction) {
 		}
 		// FLAGS none affected
 	case OpPushRm, OpPushReg, OpPushSeg:
+		arg := inst.operands[0]
+		cpu.RegisterFile[RegSP] -= 2
+		switch arg.W() {
+		case 0:
+			cpu.Data.Write16(cpu.RegisterFile[RegSP], uint16(cpu.Get8(arg)))
+		case 1:
+			cpu.Data.Write16(cpu.RegisterFile[RegSP], uint16(cpu.Get16(arg)))
+		}
+		// FLAGS none affected
 	case OpPopRm, OpPopReg, OpPopSeg:
 	case OpXchgRmReg, OpXchgAccReg:
 	case OpInFixedPort:
