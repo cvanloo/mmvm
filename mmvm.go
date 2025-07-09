@@ -1975,7 +1975,21 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpRetInterSeg:
 	case OpRetInterSegImm:
 	case OpJe:
+		if ZF(cpu.RegisterFile[RegFLAGS]) == 1 {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
 	case OpJl:
+		if SF(cpu.RegisterFile[RegFLAGS]) != OF(cpu.RegisterFile[RegFLAGS]) {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
 	case OpJle:
 	case OpJb:
 	case OpJbe:
@@ -1984,6 +1998,13 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpJs:
 	case OpJne:
 	case OpJnl:
+		if SF(cpu.RegisterFile[RegFLAGS]) == OF(cpu.RegisterFile[RegFLAGS]) {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
 	case OpJnle:
 	case OpJnb:
 	case OpJnbe:
