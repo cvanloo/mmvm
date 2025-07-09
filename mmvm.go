@@ -2013,6 +2013,13 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpJo:
 	case OpJs:
 	case OpJne:
+		if ZF(cpu.RegisterFile[RegFLAGS]) == 0 {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
 	case OpJnl:
 		if SF(cpu.RegisterFile[RegFLAGS]) == OF(cpu.RegisterFile[RegFLAGS]) {
 			arg := inst.operands[0]
