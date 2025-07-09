@@ -1800,6 +1800,27 @@ func (cpu *CPU) Step(inst Instruction) {
 	case OpRcr:
 	case OpAndRegRm, OpAndRmImm, OpAndAccImm:
 	case OpTestRegRm, OpTestRmImm, OpTestAccImm:
+		s1 := inst.operands[0]
+		s2 := inst.operands[1]
+		switch {
+		default:
+			panic(ErrOperandWidthMismatch)
+		case s1.W() == 0 && s2.W() == 0:
+			a := cpu.Get8(s1)
+			b := cpu.Get8(s2)
+			r := a & b
+			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
+		case s1.W() == 1 && s2.W() == 1:
+			a := cpu.Get8(s1)
+			b := cpu.Get8(s2)
+			r := a & b
+			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
+		case s1.W() == 1 && s2.W() == 0 && isImm(s2):
+			a := cpu.Get8(s1)
+			b := cpu.Get8(s2)
+			r := a & b
+			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
+		}
 	case OpOrRegRm, OpOrRmImm, OpOrAccImm:
 	case OpXorRegRm, OpXorRmImm, OpXorAccImm:
 		dst := inst.operands[0]
