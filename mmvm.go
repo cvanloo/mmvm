@@ -1896,6 +1896,24 @@ func (cpu *CPU) Step(inst Instruction) {
 			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
 		}
 	case OpOrRegRm, OpOrRmImm, OpOrAccImm:
+		dst := inst.operands[0]
+		src := inst.operands[1]
+		switch {
+		default:
+			panic(ErrOperandWidthMismatch)
+		case dst.W() == 0 && src.W() == 0:
+			r := cpu.Get8(dst) | cpu.Get8(src)
+			cpu.Set8(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
+		case dst.W() == 1 && src.W() == 1:
+			r := cpu.Get16(dst) | cpu.Get16(src)
+			cpu.Set16(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
+		case dst.W() == 1 && src.W() == 0 && isImm(src):
+			r := cpu.Get16(dst) | cpu.Get8(src)
+			cpu.Set8(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
+		}
 	case OpXorRegRm, OpXorRmImm, OpXorAccImm:
 		dst := inst.operands[0]
 		src := inst.operands[1]
