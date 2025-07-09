@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+MODE="${MODE:--d}"
+LIMIT=$((${LIMIT:-0}))
+
 go build mmvm.go || exit 1
 if ! command -v mmvm 2>&1 >/dev/null
 then
@@ -8,10 +11,15 @@ then
 fi
 
 function run_diff {
-    ./mmvm -d "$1" > mine.disas
-    mmvm -d "$1" > other.disas 2>&1
-    local d=$(diff mine.disas other.disas)
-    echo $d
+    if [[ $LIMIT > 0 ]]; then
+        ./mmvm "$MODE" -n $((LIMIT-1)) "$1" > mine.disas
+        mmvm "$MODE" "$1" 2>&1 | head -n $LIMIT > other.disas 
+    else
+        ./mmvm "$MODE" "$1" > mine.disas
+        mmvm "$MODE" "$1" > other.disas 2>&1
+    fi
+    local d=$(diff --suppress-common-lines mine.disas other.disas)
+    echo "$d"
 }
 
 if [[ "$1" == "all" ]]; then
@@ -21,15 +29,15 @@ if [[ "$1" == "all" ]]; then
         d=$(run_diff $file)
         if [[ -n "$d" ]]; then
             st=1
-            echo $d
+            echo "$d"
         fi
     done
-    exit $st
+    exit "$st"
 else
     A="${A:-a.out}"
     d=$(run_diff $A)
     if [[ -n "$d" ]]; then
-        echo $d
+        echo "$d"
         exit 1
     fi
 fi
