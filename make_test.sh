@@ -25,7 +25,7 @@ function run_diff {
 
 if [[ "$1" == "all" ]]; then
     TEST_FILES_DIR="${TEST_FILES_DIR:-test_programs}"
-    local st=0
+    st=0
     for file in $TEST_FILES_DIR/*.out; do
         d=$(run_diff $file)
         if [[ -n "$d" ]]; then
