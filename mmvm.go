@@ -2332,7 +2332,9 @@ func (cpu *CPU) execve(argv, envp []string) {
 	}
 	//fmt.Printf("totalLen: %d, frameStart: %04x\n", totalLen, frame - totalLen)
 	addrs := make([]uint16, len(argv) + len(envp))
-	for i, s := range slices.Concat(envp, argv) {
+	ss := slices.Concat(argv, envp)
+	slices.Reverse(ss)
+	for i, s := range ss {
 		frame -= uint16(len(s)) + 1
 		cpu.Data.WriteString(frame, s)
 		addrs[i] = frame
@@ -2349,11 +2351,11 @@ func (cpu *CPU) execve(argv, envp []string) {
 	cpu.RegisterFile[RegSP] = frame
 }
 
-func emulate(exec Exec, name string, bin []byte, debug bool) error {
+func emulate(exec Exec, name string, bin []byte, args []string, debug bool) error {
 	cpu := &CPU{}
 	cpu.RegisterFile[RegSP] = 0xFFFF // 0xFFFE, 0x0000
 	// @note: Minix2:SYS/src/mm/exec.c +50
-	cpu.execve([]string{name}, []string{"PATH=/usr:/usr/bin"})
+	cpu.execve(append([]string{name}, args...), []string{"PATH=/usr:/usr/bin"})
 	// @todo: flags = 0x20 for separate text/data
 
 	/* Memory Layout
@@ -2458,7 +2460,7 @@ func main() {
 			fmt.Println(InstructionFormatterWithOffset{inst})
 		}
 	} else {
-		err := emulate(exec, file, bin, *m)
+		err := emulate(exec, file, bin, restArgs[1:], *m)
 		if err != nil {
 			log.Println(err)
 		}
