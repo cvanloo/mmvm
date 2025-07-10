@@ -1971,7 +1971,21 @@ func (cpu *CPU) Step(inst Instruction) {
 		// FLAGS none affected
 	//case OpCWD:
 	//case OpNot:
-	//case OpShlSal:
+	case OpShlSal:
+		dst := inst.operands[0]
+		c := inst.operands[1]
+		switch dst.W() {
+		case 0:
+			r := cpu.Get8(dst) << cpu.Get8(c)
+			cpu.Set8(dst, r)
+			cf := r >> 8
+			cpu.Flags().SetZSCO(r == 0, r < 0, cf == 1, cf != (r >> 8))
+		case 1:
+			r := cpu.Get16(dst) << cpu.Get16(c)
+			cpu.Set16(dst, r)
+			cf := r >> 16
+			cpu.Flags().SetZSCO(r == 0, r < 0, cf == 1, cf != (r >> 16))
+		}
 	//case OpShr:
 	//case OpSar:
 	//case OpRol:
