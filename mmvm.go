@@ -2086,12 +2086,50 @@ func (cpu *CPU) Step(inst Instruction) {
 			return // don't increment IP
 		}
 		// FLAGS none affected
-	//case OpJle:
-	//case OpJb:
-	//case OpJbe:
-	//case OpJp:
-	//case OpJo:
-	//case OpJs:
+	case OpJle:
+		flags := cpu.RegisterFile[RegFLAGS]
+		if ZF(flags) == 1 || SF(flags) != OF(flags) {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
+	case OpJb:
+		if CF(cpu.RegisterFile[RegFLAGS]) == 1 {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
+	case OpJbe:
+		flags := cpu.RegisterFile[RegFLAGS]
+		if CF(flags) == 1 || ZF(flags) == 1 {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
+	case OpJp:
+		panic("jp (jump if PF == 1) not supported")
+	case OpJo:
+		if OF(cpu.RegisterFile[RegFLAGS]) == 1 {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
+	case OpJs:
+		if SF(cpu.RegisterFile[RegFLAGS]) == 1 {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
 	case OpJne:
 		if ZF(cpu.RegisterFile[RegFLAGS]) == 0 {
 			arg := inst.operands[0]
@@ -2108,7 +2146,15 @@ func (cpu *CPU) Step(inst Instruction) {
 			return // don't increment IP
 		}
 		// FLAGS none affected
-	//case OpJnle:
+	case OpJnle:
+		flags := cpu.RegisterFile[RegFLAGS]
+		if ZF(flags) == 0 && SF(flags) == OF(flags) {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
 	case OpJnb:
 		if CF(cpu.RegisterFile[RegFLAGS]) == 0 {
 			arg := inst.operands[0]
@@ -2117,10 +2163,33 @@ func (cpu *CPU) Step(inst Instruction) {
 			return // don't increment IP
 		}
 		// FLAGS none affected
-	//case OpJnbe:
-	//case OpJnp:
-	//case OpJno:
-	//case OpJns:
+	case OpJnbe:
+		flags := cpu.RegisterFile[RegFLAGS]
+		if CF(flags) == 0 && ZF(flags) == 0 {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
+	case OpJnp:
+		panic("jnp (jump if PF == 0) not supported")
+	case OpJno:
+		if CF(cpu.RegisterFile[RegFLAGS]) == 0 {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
+	case OpJns:
+		if SF(cpu.RegisterFile[RegFLAGS]) == 0 {
+			arg := inst.operands[0]
+			addr := uint16(cpu.Get16(arg))
+			cpu.RegisterFile[RegIP] = addr
+			return // don't increment IP
+		}
+		// FLAGS none affected
 	//case OpLoop:
 	//case OpLoopz:
 	//case OpLoopnz:
