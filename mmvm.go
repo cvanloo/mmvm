@@ -2140,7 +2140,13 @@ func (cpu *CPU) Step(inst Instruction) {
 		cpu.RegisterFile[RegIP] = addr
 		return // don't increment IP
 		// FLAGS none affected
-	//case OpRetSegImm:
+	case OpRetSegImm:
+		imm := inst.operands[0]
+		addr := cpu.Data.Read16(cpu.RegisterFile[RegSP])
+		cpu.RegisterFile[RegSP] += 2 + uint16(cpu.Get16(imm))
+		cpu.RegisterFile[RegIP] = addr
+		return // don't increment IP
+		// FLAGS none affected
 	//case OpRetInterSeg:
 	//case OpRetInterSegImm:
 	case OpJe:
