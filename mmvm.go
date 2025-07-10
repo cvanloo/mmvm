@@ -1969,7 +1969,11 @@ func (cpu *CPU) Step(inst Instruction) {
 		al := int8(cpu.RegisterFile[RegA])
 		cpu.RegisterFile[RegA] = uint16(int16(al))
 		// FLAGS none affected
-	//case OpCWD:
+	case OpCWD:
+		a := cpu.RegisterFile[RegA]
+		d := int32(int16(a)) // sign-extend
+		cpu.RegisterFile[RegD] = uint16(d >> 16)
+		// FLAGS none affected
 	//case OpNot:
 	case OpShlSal:
 		dst := inst.operands[0]
