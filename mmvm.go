@@ -1427,6 +1427,7 @@ type (
 		RegisterFile [10]uint16
 		Text RAM
 		Data RAM
+		ProgramBreak uint16
 	}
 	Flags struct {
 		reg *uint16
@@ -1694,6 +1695,37 @@ func (cpu *CPU) Step(inst Instruction) {
 					}
 					cpu.RegisterFile[RegA] = 0 // ?
 					return uint16(ret)
+				},
+				17: func(cpu *CPU) uint16 { // brk
+					type Msg struct {
+						source, type_ uint16
+						_ [6]byte
+						address uint16
+						_ [6]byte
+						reply uint16
+					}
+					addr := cpu.RegisterFile[RegB]
+					bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
+					msg := (*Msg)(unsafe.Pointer(&bs[0]))
+					if *m {
+						fmt.Printf("<brk(0x%04x) => ", msg.address)
+					}
+					ret := uint16(0)
+					if true { // @todo: checks???
+						cpu.ProgramBreak = msg.address
+						msg.reply = cpu.ProgramBreak
+						if *m {
+							fmt.Printf("0>\n")
+						}
+					} else {
+						ret = uint16(-ENOMEM)
+						msg.reply = 0xFFFF // -1
+						if *m {
+							fmt.Printf("ENOMEM>\n")
+						}
+					}
+					cpu.RegisterFile[RegA] = 0 // ?
+					return ret
 				},
 				54: func(cpu *CPU) uint16 { // ioctl
 					type Msg struct {
@@ -2127,6 +2159,7 @@ type MinixError int
 func (err MinixError) Error() string {
 	return "minix: " + map[int]string{
 		7: "argument list too long",
+		12: "cannot allocate memory",
 		22: "invalid argument",
 	}[int(err)]
 }
@@ -2134,6 +2167,7 @@ func (err MinixError) Error() string {
 // errno -l
 var (
 	E2BIG = MinixError(7)
+	ENOMEM = MinixError(12)
 	EINVAL = MinixError(22)
 )
 
