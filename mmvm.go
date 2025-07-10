@@ -1544,8 +1544,8 @@ func (cpu *CPU) Set8(opnd Operand, val int32) {
 			// write to upper half does not zero the lower half
 			cpu.RegisterFile[o.name - RegAH] = uint16(val << 8) | (cpu.RegisterFile[o.name - RegAH] & 0x00FF)
 		} else {
-			// write to lower half of the register zeros out the upper half
-			cpu.RegisterFile[o.name] = uint16(uint8(val))
+			// write to lower half does not zero the upper half
+			cpu.RegisterFile[o.name] = (cpu.RegisterFile[o.name] & 0xFF00) | uint16(uint8(val))
 		}
 	case Memory:
 		addr := o.Addr(cpu)
