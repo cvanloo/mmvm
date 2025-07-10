@@ -2092,13 +2092,12 @@ func (cpu *CPU) Step(inst Instruction) {
 		// FLAGS none affected
 	//case OpCallDirInterSeg:
 	//case OpCallIndirInterSeg:
-	case OpJmpDirSeg, OpJmpShortDirSeg:
+	case OpJmpDirSeg, OpJmpShortDirSeg, OpJmpIndirSeg:
 		arg := inst.operands[0]
 		addr := uint16(cpu.Get16(arg))
 		cpu.RegisterFile[RegIP] = addr
 		return // don't increment IP
 		// FLAGS none affected
-	//case OpJmpIndirSeg:
 	//case OpJmpDirInterSeg:
 	//case OpJmpIndirInterSeg:
 	case OpRetSeg:
