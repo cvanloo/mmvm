@@ -2068,7 +2068,7 @@ func (cpu *CPU) Step(inst Instruction) {
 	//case OpScasw:
 	//case OpLodsw:
 	//case OpStosw:
-	case OpCallDirSeg:
+	case OpCallDirSeg, OpCallIndirSeg:
 		cpu.RegisterFile[RegSP] -= 2
 		cpu.Data.Write16(cpu.RegisterFile[RegSP], uint16(inst.offset + inst.size))
 		arg := inst.operands[0]
@@ -2076,7 +2076,6 @@ func (cpu *CPU) Step(inst Instruction) {
 		cpu.RegisterFile[RegIP] = addr
 		return // don't increment IP
 		// FLAGS none affected
-	//case OpCallIndirSeg:
 	//case OpCallDirInterSeg:
 	//case OpCallIndirInterSeg:
 	case OpJmpDirSeg, OpJmpShortDirSeg:
