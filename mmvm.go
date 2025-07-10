@@ -1813,7 +1813,20 @@ func (cpu *CPU) Step(inst Instruction) {
 			cpu.RegisterFile[RegSP] += 2
 		}
 		// FLAGS none affected
-	//case OpXchgRmReg, OpXchgAccReg:
+	case OpXchgRmReg, OpXchgAccReg:
+		a := inst.operands[0]
+		b := inst.operands[1]
+		switch {
+		case a.W() == 0 && b.W() == 0:
+			tmp := cpu.Get8(a)
+			cpu.Set8(a, cpu.Get8(b))
+			cpu.Set8(b, tmp)
+		case a.W() == 1 && b.W() == 1:
+			tmp := cpu.Get16(a)
+			cpu.Set16(a, cpu.Get16(b))
+			cpu.Set16(b, tmp)
+		}
+		// FLAGS none affected
 	//case OpInFixedPort:
 	//case OpInVarPort:
 	//case OpOutFixedPort:
