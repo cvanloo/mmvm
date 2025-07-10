@@ -658,61 +658,34 @@ func (iswma InstructionFormatterWithMemoryAccess) String() string {
 	return printInst(iswma.inst)
 }
 
-func W(i byte) byte {
-	return i & 1
+func bitsExtract(s, m byte) func(byte) byte {
+	return func(i byte) byte {
+		return (i >> s) & m
+	}
 }
 
-func REG1(i byte) byte {
-	return i & 0b111
-}
-
-func WREG(i byte) (w, reg byte) {
-	return (i >> 3) & 1, i & 0b111
-}
-
-func DW(i byte) (d, w byte) {
-	return D(i), W(i)
-}
-
-func SW(i byte) (s, w byte) {
-	return S(i), W(i)
-}
-
-func VW(i byte) (v, w byte) {
-	return V(i), W(i)
-}
-
-func D(i byte) byte {
-	return (i >> 1) & 1
-}
-
-func S(i byte) byte {
-	return (i >> 1) & 1
-}
-
-func V(i byte) byte {
-	return (i >> 1) & 1
-}
-
-func MODREGRM(i byte) (mod, reg, rm byte) {
-	return MOD(i), REG(i), RM(i)
-}
-
-func MOD(i byte) byte {
-	return (i >> 6) & 0b11
-}
-
-func RM(i byte) byte {
-	return i & 0b111
-}
-
-func REG(i byte) byte {
-	return (i >> 3) & 0b111
-}
-
-func SEG(i byte) byte {
-	return (i >> 3) & 0b11
-}
+var (
+	W = bitsExtract(0, 1)
+	REG1 = bitsExtract(0, 0b111)
+	D = bitsExtract(1, 1)
+	S = D
+	V = D
+	MOD = bitsExtract(6, 0b11)
+	RM = bitsExtract(0, 0b111)
+	REG = bitsExtract(3, 0b111)
+	SEG = bitsExtract(3, 0b11)
+	WREG = func(i byte) (w, reg byte) {
+		return (i >> 3) & 1, i & 0b111
+	}
+	DW = func(i byte) (d, w byte) {
+		return D(i), W(i)
+	}
+	SW = DW
+	VW = DW
+	MODREGRM = func(i byte) (mod, reg, rm byte) {
+		return MOD(i), REG(i), RM(i)
+	}
+)
 
 type Source struct {
 	Text []byte
