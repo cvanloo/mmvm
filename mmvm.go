@@ -2023,12 +2023,12 @@ func (cpu *CPU) Step(inst Instruction) {
 			r := a & b
 			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
 		case s1.W() == 1 && s2.W() == 1:
-			a := cpu.Get8(s1)
-			b := cpu.Get8(s2)
+			a := cpu.Get16(s1)
+			b := cpu.Get16(s2)
 			r := a & b
 			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
 		case s1.W() == 1 && s2.W() == 0 && isImm(s2):
-			a := cpu.Get8(s1)
+			a := cpu.Get16(s1)
 			b := cpu.Get8(s2)
 			r := a & b
 			cpu.Flags().SetZSCO(r == 0, r < 0, false, false)
