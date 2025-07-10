@@ -1962,7 +1962,24 @@ func (cpu *CPU) Step(inst Instruction) {
 	//case OpMul:
 	//case OpImul:
 	//case OpAAM:
-	//case OpDiv:
+	case OpDiv:
+		arg := inst.operands[0]
+		switch arg.W() {
+		case 0:
+			dividend := cpu.RegisterFile[RegA]
+			divisor := uint16(cpu.Get8(arg))
+			quotient := dividend / divisor
+			remainder := dividend - quotient * divisor
+			cpu.RegisterFile[RegA] = ((remainder << 8) & 0xFF00) | (quotient & 0x00FF)
+		case 1:
+			dividend := (uint32(cpu.RegisterFile[RegD]) << 8) | uint32(cpu.RegisterFile[RegA])
+			divisor := uint32(uint16(cpu.Get16(arg)))
+			quotient := dividend / divisor
+			remainder := dividend - quotient * divisor
+			cpu.RegisterFile[RegA] = uint16(quotient)
+			cpu.RegisterFile[RegD] = uint16(remainder)
+		}
+		// FLAGS none affected (undefined)
 	//case OpIdiv:
 	//case OpAAD:
 	case OpCBW:
