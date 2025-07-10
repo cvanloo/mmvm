@@ -2010,15 +2010,19 @@ func (cpu *CPU) Step(inst Instruction) {
 		c := inst.operands[1]
 		switch dst.W() {
 		case 0:
-			r := cpu.Get8(dst) << cpu.Get8(c)
+			a := cpu.Get8(dst)
+			b := cpu.Get8(c)
+			r := a << b
 			cpu.Set8(dst, r)
-			cf := r >> 8
-			cpu.Flags().SetZSCO(r == 0, r < 0, cf == 1, cf != (r >> 8))
+			cf := (r >> 8) & 1
+			cpu.Flags().SetZSCO(r == 0, r >> 7 == 1, cf == 1, !(b == 1 && cf == (r >> 8)))
 		case 1:
-			r := cpu.Get16(dst) << cpu.Get16(c)
+			a := cpu.Get16(dst)
+			b := cpu.Get16(c)
+			r := a << b
 			cpu.Set16(dst, r)
-			cf := r >> 16
-			cpu.Flags().SetZSCO(r == 0, r < 0, cf == 1, cf != (r >> 16))
+			cf := (r >> 16) & 1
+			cpu.Flags().SetZSCO(r == 0, r >> 15 == 1, cf == 1, !(b == 1 && cf == (r >> 16)))
 		}
 	//case OpShr:
 	case OpSar:
