@@ -1502,6 +1502,9 @@ func (cpu *CPU) Get8(opnd Operand) int32 {
 	default:
 		panic(fmt.Errorf("invalid operand: %T", opnd))
 	case Register:
+		if o.width == 0 && o.name >= RegAH && o.name <= RegBH {
+			return int32(int8(cpu.RegisterFile[o.name - RegAH] >> 8))
+		}
 		return int32(int8(cpu.RegisterFile[o.name]))
 	case Memory:
 		addr := o.Addr(cpu)
@@ -1518,6 +1521,9 @@ func (cpu *CPU) Get16(opnd Operand) int32 {
 	default:
 		panic(fmt.Errorf("invalid operand: %T", opnd))
 	case Register:
+		if o.width == 0 && o.name >= RegAH && o.name <= RegBH {
+			return int32(int8(cpu.RegisterFile[o.name - RegAH] >> 8))
+		}
 		return int32(int16(cpu.RegisterFile[o.name]))
 	case Memory:
 		addr := o.Addr(cpu)
@@ -1534,8 +1540,13 @@ func (cpu *CPU) Set8(opnd Operand, val int32) {
 	default:
 		panic(fmt.Errorf("invalid operand: %T", opnd))
 	case Register:
-		// write to lower half of the register zeros out the upper half
-		cpu.RegisterFile[o.name] = uint16(uint8(val))
+		if o.width == 0 && o.name >= RegAH && o.name <= RegBH {
+			// write to upper half does not zero the lower half
+			cpu.RegisterFile[o.name - RegAH] = uint16(val << 8) | (cpu.RegisterFile[o.name - RegAH] & 0x00FF)
+		} else {
+			// write to lower half of the register zeros out the upper half
+			cpu.RegisterFile[o.name] = uint16(uint8(val))
+		}
 	case Memory:
 		addr := o.Addr(cpu)
 		cpu.Data[addr] = byte(val)
@@ -1547,7 +1558,12 @@ func (cpu *CPU) Set16(opnd Operand, val int32) {
 	default:
 		panic(fmt.Errorf("invalid operand: %T", opnd))
 	case Register:
-		cpu.RegisterFile[o.name] = uint16(val)
+		if o.width == 0 && o.name >= RegAH && o.name <= RegBH {
+			// @fixme: should it even be valid to call Set16 on a 8-bit reg?
+			cpu.RegisterFile[o.name - RegAH] = uint16(val << 8) | (cpu.RegisterFile[o.name - RegAH] & 0x00FF)
+		} else {
+			cpu.RegisterFile[o.name] = uint16(val)
+		}
 	case Memory:
 		addr := o.Addr(cpu)
 		cpu.Data[addr+1] = byte(val >> 8)
