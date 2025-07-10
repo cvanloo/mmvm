@@ -13,7 +13,6 @@ import (
 	"flag"
 	"runtime"
 	"math"
-	"iter"
 )
 
 // @todo: https://www.muppetlabs.com/~breadbox/txt/mopb.html
@@ -2208,20 +2207,7 @@ func emulate(exec Exec, name string, bin []byte, debug bool) error {
 	if debug {
 		fmt.Println(" AX   BX   CX   DX   SP   BP   SI   DI  FLAGS IP")
 	}
-	limiter := func(n int) iter.Seq[int] {
-		return func(yield func(int) bool) {
-			if n == 0 {
-				i := 0
-				for yield(i) {
-					i++
-				}
-			} else {
-				for i := 0; i < n && yield(i); i++ {
-				}
-			}
-		}
-	}
-	for range limiter(*n) {
+	for {
 		src := cpu.Fetch()
 		inst, err := cpu.Decode(src)
 		if err != nil {
@@ -2252,11 +2238,10 @@ func must[T any](t T, err error) T {
 
 var d = flag.Bool("d", false, "disassemble")
 var m = flag.Bool("m", false, "debug")
-var n = flag.Int("n", 0, "stop executing after n instructions")
 
 func init() {
 	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [-d|-m|-n] a.out\n", os.Args[0])
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [-d|-m] a.out\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
