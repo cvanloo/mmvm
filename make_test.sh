@@ -3,7 +3,7 @@
 MODE="${MODE:--d}"
 LIMIT=$((${LIMIT:-0}))
 
-go build mmvm.go || exit 1
+go build || exit 1
 if ! command -v mmvm 2>&1 >/dev/null
 then
     echo "mmvm installation not found"

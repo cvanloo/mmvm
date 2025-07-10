@@ -127,345 +127,147 @@ const (
 	SegDS
 )
 
+//go:generate stringer -type=Operation -trimprefix=Op -linecomment
 const (
-	OpInvalid Operation = iota
-	OpMovRegRm
-	OpMovRmImm
-	OpMovRegImm
-	OpMovAccMem
-	OpMovMemAcc
-	OpMovRmSeg
-	OpPushRm
-	OpPushReg
-	OpPushSeg
-	OpPopRm
-	OpPopReg
-	OpPopSeg
-	OpXchgRmReg
-	OpXchgAccReg
-	OpInFixedPort
-	OpInVarPort
-	OpOutFixedPort
-	OpOutVarPort
-	OpXLAT
-	OpLEA
-	OpLDS
-	OpLES
-	OpLAHF
-	OpSAHF
-	OpPUSHF
-	OpPOPF
-	OpAddRegRm
-	OpAddRmImm
-	OpAddAccImm
-	OpAdcRegRm
-	OpAdcRmImm
-	OpAdcAccImm
-	OpIncRm
-	OpIncReg
-	OpAAA
-	OpBAA
-	OpSubRegRm
-	OpSubRmImm
-	OpSubAccImm
-	OpSsbRegRm
-	OpSsbRmImm
-	OpSsbAccImm
-	OpDecRm
-	OpDecReg
-	OpNeg
-	OpCmpRegRm
-	OpCmpRmImm
-	OpCmpAccImm
-	OpAAS
-	OpDAS
-	OpMul
-	OpImul
-	OpAAM
-	OpDiv
-	OpIdiv
-	OpAAD
-	OpCBW
-	OpCWD
-	OpNot
-	OpShlSal
-	OpShr
-	OpSar
-	OpRol
-	OpRor
-	OpRcl
-	OpRcr
-	OpAndRegRm
-	OpAndRmImm
-	OpAndAccImm
-	OpTestRegRm
-	OpTestRmImm
-	OpTestAccImm
-	OpOrRegRm
-	OpOrRmImm
-	OpOrAccImm
-	OpXorRegRm
-	OpXorRmImm
-	OpXorAccImm
-	OpRep
-	OpMovsb
-	OpCmpsb
-	OpScasb
-	OpLodsb
-	OpStosb
-	OpMovsw
-	OpCmpsw
-	OpScasw
-	OpLodsw
-	OpStosw
-	OpCallDirSeg
-	OpCallIndirSeg
-	OpCallDirInterSeg
-	OpCallIndirInterSeg
-	OpJmpDirSeg
-	OpJmpShortDirSeg
-	OpJmpIndirSeg
-	OpJmpDirInterSeg
-	OpJmpIndirInterSeg
-	OpRetSeg
-	OpRetSegImm
-	OpRetInterSeg
-	OpRetInterSegImm
-	OpJe
-	OpJl
-	OpJle
-	OpJb
-	OpJbe
-	OpJp
-	OpJo
-	OpJs
-	OpJne
-	OpJnl
-	OpJnle
-	OpJnb
-	OpJnbe
-	OpJnp
-	OpJno
-	OpJns
-	OpLoop
-	OpLoopz
-	OpLoopnz
-	OpJcxz
-	OpIntType3
-	OpIntTypeSpecified
-	OpInto
-	OpIret
-	OpClc
-	OpCmc
-	OpStc
-	OpCld
-	OpStd
-	OpCli
-	OpSti
-	OpHlt
-	OpWait
-	OpEsc
-	OpLock
+	OpInvalid Operation = iota // (undefined)
+	OpMovRegRm                 // mov
+	OpMovRmImm                 // mov
+	OpMovRegImm                // mov
+	OpMovAccMem                // mov
+	OpMovMemAcc                // mov
+	OpMovRmSeg                 // mov
+	OpPushRm                   // push
+	OpPushReg                  // push
+	OpPushSeg                  // push
+	OpPopRm                    // pop
+	OpPopReg                   // pop
+	OpPopSeg                   // pop
+	OpXchgRmReg                // xchg
+	OpXchgAccReg               // xchg
+	OpInFixedPort              // in
+	OpInVarPort                // in
+	OpOutFixedPort             // out
+	OpOutVarPort               // out
+	OpXLAT                     // xlat
+	OpLEA                      // lea
+	OpLDS                      // lds
+	OpLES                      // les
+	OpLAHF                     // lahf
+	OpSAHF                     // sahf
+	OpPUSHF                    // pushf
+	OpPOPF                     // popf
+	OpAddRegRm                 // add
+	OpAddRmImm                 // add
+	OpAddAccImm                // add
+	OpAdcRegRm                 // adc
+	OpAdcRmImm                 // adc
+	OpAdcAccImm                // adc
+	OpIncRm                    // inc
+	OpIncReg                   // inc
+	OpAAA                      // aaa
+	OpBAA                      // baa
+	OpSubRegRm                 // sub
+	OpSubRmImm                 // sub
+	OpSubAccImm                // sub
+	OpSsbRegRm                 // sbb
+	OpSsbRmImm                 // sbb
+	OpSsbAccImm                // sbb
+	OpDecRm                    // dec
+	OpDecReg                   // dec
+	OpNeg                      // neg
+	OpCmpRegRm                 // cmp
+	OpCmpRmImm                 // cmp
+	OpCmpAccImm                // cmp
+	OpAAS                      // aas
+	OpDAS                      // das
+	OpMul                      // mul
+	OpImul                     // imul
+	OpAAM                      // aam
+	OpDiv                      // div
+	OpIdiv                     // idiv
+	OpAAD                      // aad
+	OpCBW                      // cbw
+	OpCWD                      // cwd
+	OpNot                      // not
+	OpShlSal                   // shl
+	OpShr                      // shr
+	OpSar                      // sar
+	OpRol                      // rol
+	OpRor                      // ror
+	OpRcl                      // rcl
+	OpRcr                      // rcr
+	OpAndRegRm                 // and
+	OpAndRmImm                 // and
+	OpAndAccImm                // and
+	OpTestRegRm                // test
+	OpTestRmImm                // test
+	OpTestAccImm               // test
+	OpOrRegRm                  // or
+	OpOrRmImm                  // or
+	OpOrAccImm                 // or
+	OpXorRegRm                 // xor
+	OpXorRmImm                 // xor
+	OpXorAccImm                // xor
+	OpRep                      // rep
+	OpMovsb                    // movsb
+	OpCmpsb                    // cmpsb
+	OpScasb                    // scasb
+	OpLodsb                    // lodsb
+	OpStosb                    // stosb
+	OpMovsw                    // movsw
+	OpCmpsw                    // cmpsw
+	OpScasw                    // scasw
+	OpLodsw                    // lodsw
+	OpStosw                    // stosw
+	OpCallDirSeg               // call
+	OpCallIndirSeg             // call
+	OpCallDirInterSeg          // call
+	OpCallIndirInterSeg        // call
+	OpJmpDirSeg                // jmp
+	OpJmpShortDirSeg           // jmp short
+	OpJmpIndirSeg              // jmp
+	OpJmpDirInterSeg           // jmp
+	OpJmpIndirInterSeg         // jmp
+	OpRetSeg                   // ret
+	OpRetSegImm                // ret
+	OpRetInterSeg              // ret
+	OpRetInterSegImm           // ret
+	OpJe                       // je
+	OpJl                       // jl
+	OpJle                      // jle
+	OpJb                       // jb
+	OpJbe                      // jbe
+	OpJp                       // jp
+	OpJo                       // jo
+	OpJs                       // js
+	OpJne                      // jne
+	OpJnl                      // jnl
+	OpJnle                     // jnle
+	OpJnb                      // jnb
+	OpJnbe                     // jnbe
+	OpJnp                      // jnp
+	OpJno                      // jno
+	OpJns                      // jns
+	OpLoop                     // loop
+	OpLoopz                    // loopz
+	OpLoopnz                   // loopnz
+	OpJcxz                     // jcxz
+	OpIntType3                 // int
+	OpIntTypeSpecified         // int
+	OpInto                     // into
+	OpIret                     // iret
+	OpClc                      // clc
+	OpCmc                      // cmc
+	OpStc                      // stc
+	OpCld                      // cld
+	OpStd                      // std
+	OpCli                      // cli
+	OpSti                      // sti
+	OpHlt                      // hlt
+	OpWait                     // wait
+	OpEsc                      // esc
+	OpLock                     // lock
 )
-
-func (op Operation) String() string {
-	switch op {
-	default:
-		panic("unknown operation")
-	case OpInvalid:
-		return "(undefined)"
-	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
-		return "mov"
-	case OpPushRm, OpPushReg, OpPushSeg:
-		return "push"
-	case OpPopRm, OpPopReg, OpPopSeg:
-		return "pop"
-	case OpXchgRmReg, OpXchgAccReg:
-		return "xchg"
-	case OpInFixedPort, OpInVarPort:
-		return "in"
-	case OpOutFixedPort, OpOutVarPort:
-		return "out"
-	case OpXLAT:
-		return "xlat"
-	case OpLEA:
-		return "lea"
-	case OpLDS:
-		return "lds"
-	case OpLES:
-		return "les"
-	case OpLAHF:
-		return "lahf"
-	case OpSAHF:
-		return "sahf"
-	case OpPUSHF:
-		return "pushf"
-	case OpPOPF:
-		return "popf"
-	case OpAddRegRm, OpAddRmImm, OpAddAccImm:
-		return "add"
-	case OpAdcRegRm, OpAdcRmImm, OpAdcAccImm:
-		return "adc"
-	case OpIncRm, OpIncReg:
-		return "inc"
-	case OpAAA:
-		return "aaa"
-	case OpBAA:
-		return "baa"
-	case OpSubRegRm, OpSubRmImm, OpSubAccImm:
-		return "sub"
-	case OpSsbRegRm, OpSsbRmImm, OpSsbAccImm:
-		return "sbb"
-	case OpDecRm, OpDecReg:
-		return "dec"
-	case OpNeg:
-		return "neg"
-	case OpCmpRegRm, OpCmpRmImm, OpCmpAccImm:
-		return "cmp"
-	case OpAAS:
-		return "aas"
-	case OpDAS:
-		return "das"
-	case OpMul:
-		return "mul"
-	case OpImul:
-		return "imul"
-	case OpAAM:
-		return "aam"
-	case OpDiv:
-		return "div"
-	case OpIdiv:
-		return "idiv"
-	case OpAAD:
-		return "aad"
-	case OpCBW:
-		return "cbw"
-	case OpCWD:
-		return "cwd"
-	case OpNot:
-		return "not"
-	case OpShlSal:
-		return "shl" // or sal
-	case OpShr:
-		return "shr"
-	case OpSar:
-		return "sar"
-	case OpRol:
-		return "rol"
-	case OpRor:
-		return "ror"
-	case OpRcl:
-		return "rcl"
-	case OpRcr:
-		return "rcr"
-	case OpAndRegRm, OpAndRmImm, OpAndAccImm:
-		return "and"
-	case OpTestRegRm, OpTestRmImm, OpTestAccImm:
-		return "test"
-	case OpOrRegRm, OpOrRmImm, OpOrAccImm:
-		return "or"
-	case OpXorRegRm, OpXorRmImm, OpXorAccImm:
-		return "xor"
-	case OpRep:
-		return "rep"
-	case OpMovsb:
-		return "movsb"
-	case OpCmpsb:
-		return "cmpsb"
-	case OpScasb:
-		return "scasb"
-	case OpLodsb:
-		return "lodsb"
-	case OpStosb:
-		return "stosb"
-	case OpMovsw:
-		return "movsw"
-	case OpCmpsw:
-		return "cmpsw"
-	case OpScasw:
-		return "scasw"
-	case OpLodsw:
-		return "lodsw"
-	case OpStosw:
-		return "stosw"
-	case OpJmpDirSeg, OpJmpIndirSeg, OpJmpDirInterSeg, OpJmpIndirInterSeg:
-		return "jmp"
-	case OpJmpShortDirSeg:
-		return "jmp short"
-	case OpCallDirSeg, OpCallIndirSeg, OpCallDirInterSeg, OpCallIndirInterSeg:
-		return "call"
-	case OpRetSeg, OpRetSegImm, OpRetInterSeg, OpRetInterSegImm:
-		return "ret"
-	case OpJe:
-		return "je"
-	case OpJl:
-		return "jl"
-	case OpJle:
-		return "jle"
-	case OpJb:
-		return "jb"
-	case OpJbe:
-		return "jbe"
-	case OpJp:
-		return "jp"
-	case OpJo:
-		return "jo"
-	case OpJs:
-		return "js"
-	case OpJne:
-		return "jne"
-	case OpJnl:
-		return "jnl"
-	case OpJnle:
-		return "jnle"
-	case OpJnb:
-		return "jnb"
-	case OpJnbe:
-		return "jnbe"
-	case OpJnp:
-		return "jnp"
-	case OpJno:
-		return "jno"
-	case OpJns:
-		return "jns"
-	case OpLoop:
-		return "loop"
-	case OpLoopz:
-		return "loopz"
-	case OpLoopnz:
-		return "loopnz"
-	case OpJcxz:
-		return "jcxz"
-	case OpIntType3, OpIntTypeSpecified:
-		return "int"
-	case OpInto:
-		return "into"
-	case OpIret:
-		return "iret"
-	case OpClc:
-		return "clc"
-	case OpCmc:
-		return "cmc"
-	case OpStc:
-		return "stc"
-	case OpCld:
-		return "cld"
-	case OpStd:
-		return "std"
-	case OpCli:
-		return "cli"
-	case OpSti:
-		return "sti"
-	case OpHlt:
-		return "hlt"
-	case OpWait:
-		return "wait"
-	case OpEsc:
-		return "esc"
-	case OpLock:
-		return "lock"
-	}
-}
 
 func (ops Operands) String() string {
 	var builder strings.Builder
