@@ -570,7 +570,7 @@ func (r Repeated) String() string {
 }
 
 func (r Repeated) W() byte {
-	panic("nonsenes calling W() on Repeated")
+	panic("nonsense calling W() on Repeated")
 }
 
 func (inst Instruction) String() string {
