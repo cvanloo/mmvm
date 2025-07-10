@@ -1,0 +1,4 @@
+#!/bin/sh
+opt=""
+if [ "x$1" = "x--m" ]; then opt="-m" shift; fi
+exec /usr/local/core/bin/mmvm $opt -r /usr/local/core/minix2 /usr/local/core/minix2/usr/bin/cc $@

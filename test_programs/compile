@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+for i in {1..7}; do
+    ./m2cc -o "$i".out "$i".c
+done
