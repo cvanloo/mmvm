@@ -2014,15 +2014,15 @@ func (cpu *CPU) Step(inst Instruction) {
 			b := cpu.Get8(c)
 			r := a << b
 			cpu.Set8(dst, r)
-			cf := (r >> 8) & 1
-			cpu.Flags().SetZSCO(r == 0, r >> 7 == 1, cf == 1, !(b == 1 && cf == (r >> 8)))
+			carry := ((a << (b-1)) >> 7) & 1
+			cpu.Flags().SetZSCO(r == 0, int8(r) < 0, carry == 1, ((r >> 7) & 1) != carry)
 		case 1:
 			a := cpu.Get16(dst)
 			b := cpu.Get16(c)
 			r := a << b
 			cpu.Set16(dst, r)
-			cf := (r >> 16) & 1
-			cpu.Flags().SetZSCO(r == 0, r >> 15 == 1, cf == 1, !(b == 1 && cf == (r >> 16)))
+			carry := ((a << (b-1)) >> 15) & 1
+			cpu.Flags().SetZSCO(r == 0, int16(r) < 0, carry == 1, ((r >> 15) & 1) != carry)
 		}
 	//case OpShr:
 	case OpSar:
@@ -2034,15 +2034,15 @@ func (cpu *CPU) Step(inst Instruction) {
 			b := cpu.Get8(c)
 			r := a >> b
 			cpu.Set8(dst, r)
-			cf := (a >> (b-1)) & 1
-			cpu.Flags().SetZSCO(r == 0, r < 0, cf == 1, (b != 1 && OF(cpu.RegisterFile[RegFLAGS]) == 1))
+			carry := (a >> (b-1)) & 1
+			cpu.Flags().SetZSCO(r == 0, int8(r) < 0, carry == 1, (b != 1 && OF(cpu.RegisterFile[RegFLAGS]) == 1))
 		case 1:
 			a := cpu.Get16(dst)
 			b := cpu.Get16(c)
 			r := a >> b
 			cpu.Set16(dst, r)
-			cf := (a >> (b-1)) & 1
-			cpu.Flags().SetZSCO(r == 0, r < 0, cf == 1, (b != 1 && OF(cpu.RegisterFile[RegFLAGS]) == 1))
+			carry := (a >> (b-1)) & 1
+			cpu.Flags().SetZSCO(r == 0, int16(r) < 0, carry == 1, (b != 1 && OF(cpu.RegisterFile[RegFLAGS]) == 1))
 		}
 	//case OpRol:
 	//case OpRor:
