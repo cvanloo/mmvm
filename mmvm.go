@@ -1428,7 +1428,6 @@ type (
 		RegisterFile [10]uint16
 		Text RAM
 		Data RAM
-		ProgramBreak uint16
 	}
 	Flags struct {
 		reg *uint16
@@ -1714,7 +1713,7 @@ func (cpu *CPU) Step(inst Instruction) {
 						fmt.Printf("<ioctl(%d, 0x%04x, 0x%04x)>\n", msg.fd, msg.request, msg.address)
 					}
 					cpu.RegisterFile[RegA] = 0 // ?
-					return uint16(EINVAL)
+					return uint16(-EINVAL)
 				},
 			}
 			type Msg struct {
@@ -2133,6 +2132,7 @@ func (err MinixError) Error() string {
 	}[int(err)]
 }
 
+// errno -l
 var (
 	E2BIG = MinixError(7)
 	EINVAL = MinixError(22)
