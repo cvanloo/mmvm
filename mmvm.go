@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"os"
@@ -474,19 +475,55 @@ var (
 type Source struct {
 	Text          []byte
 	Consumed, Pos int
+	Err           error
+}
+
+func (s *Source) Error(err error) error {
+	s.Err = errors.Join(s.Err, err)
+	return s.Err
+}
+
+func (s *Source) ErrorInst(op Operation, opn Operands, err error) error {
+	errInst := Instruction{
+		offset:    s.Consumed,
+		size:      s.Pos - s.Consumed,
+		operation: op,
+		operands:  opn,
+	}
+	copy(errInst.bytes[:], s.Text[s.Consumed:s.Pos])
+	s.Err = errors.Join(s.Err, DecodeError{errInst, err})
+	return s.Err
 }
 
 func (s *Source) Peek() byte {
+	if s.Pos >= len(s.Text) {
+		if !errors.Is(s.Err, io.EOF) {
+			s.ErrorInst(OpInvalid, nil, io.EOF)
+		}
+		return 0
+	}
 	return s.Text[s.Pos]
 }
 
 func (s *Source) Next() (b byte) {
+	if s.Pos >= len(s.Text) {
+		if !errors.Is(s.Err, io.EOF) {
+			s.ErrorInst(OpInvalid, nil, io.EOF)
+		}
+		return 0
+	}
 	b = s.Text[s.Pos]
 	s.Pos += 1
 	return b
 }
 
 func (s *Source) B(i int) (b byte) {
+	if s.Consumed+i >= len(s.Text) {
+		if !errors.Is(s.Err, io.EOF) {
+			s.ErrorInst(OpInvalid, nil, io.EOF)
+		}
+		return 0
+	}
 	return s.Text[s.Consumed+i]
 }
 
@@ -611,7 +648,18 @@ func srcdst(d byte, op1, op2 Operand) Operands {
 	}
 }
 
-var ErrDecode = errors.New("decode error")
+type DecodeError struct {
+	Inst Instruction
+	Inner error
+}
+
+func (err DecodeError) Error() string {
+	return fmt.Sprintf("decode error at +%04x: %s\n\t%s", err.Inst.offset, err.Inst, err.Inner)
+}
+
+func (err DecodeError) Unwrap() error {
+	return err.Inner
+}
 
 func decodeRepeated(src *Source) (repd Repeated, err error) {
 	var op Operation
@@ -643,22 +691,6 @@ func decodeRepeated(src *Source) (repd Repeated, err error) {
 }
 
 func decode(src *Source) (inst Instruction, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// assumption: the only thing that could ever cause a panic is an array out-of-bounds access
-			bs, offset, size := src.Consume()
-			bytes := [6]byte{}
-			copy(bytes[:], bs)
-			inst = Instruction{
-				offset:    offset,
-				size:      size,
-				bytes:     bytes,
-				operation: OpInvalid,
-				operands:  nil,
-			}
-			err = errors.Join(err, ErrDecode)
-		}
-	}()
 	var (
 		op  Operation
 		opn Operands
@@ -721,13 +753,13 @@ func decode(src *Source) (inst Instruction, err error) {
 	case i1 == 0b11010101: // aad
 		i2 := src.Next()
 		if i2 != 0b00001010 {
-			err = ErrDecode
+			err = src.ErrorInst(OpAAD, nil, errors.New("expected 0b00001010"))
 		}
 		op = OpAAD
 	case i1 == 0b11010100: // aam
 		i2 := src.Next()
 		if i2 != 0b00001010 {
-			err = ErrDecode
+			err = src.ErrorInst(OpAAM, nil, errors.New("expected 0b00001010"))
 		}
 		op = OpAAM
 	case i1 == 0b11001111: // iret
@@ -895,6 +927,7 @@ func decode(src *Source) (inst Instruction, err error) {
 			0b100: OpJmpIndirSeg,
 			0b101: OpJmpIndirInterSeg,
 			0b110: OpPushRm,
+			// @fixme: otherwise OpInvalid (remember to also fix all the other places!)
 		}[REG(src.B(1))]
 		opn = Operands{rm}
 	case (i1 & 0b11111110) == 0b11110110: // {test,not,neg,mul,imul,div,idiv} ???
@@ -1050,7 +1083,7 @@ func decode(src *Source) (inst Instruction, err error) {
 			OpXorRegRm: {},
 		}[op]
 		if sMustBeZero && s != 0 {
-			err = ErrDecode
+			err = src.ErrorInst(op, nil, errors.New("s bit must be 0"))
 		}
 		d1 := src.Next()
 		data := int16(d1)
@@ -1148,13 +1181,17 @@ func decode(src *Source) (inst Instruction, err error) {
 	bs, offset, size := src.Consume()
 	bytes := [6]byte{}
 	copy(bytes[:], bs)
+	if src.Err != nil {
+		op = OpInvalid
+		opn = nil
+	}
 	return Instruction{
 		offset:    offset,
 		size:      size,
 		bytes:     bytes,
 		operation: op,
 		operands:  opn,
-	}, err
+	}, src.Error(nil)
 }
 
 func disassemble(text []byte) (insts []Instruction, disasErr error) {
@@ -2219,8 +2256,10 @@ func main() {
 
 	if *d {
 		text := exec.Text(bin)
-		insts, _ := disassemble(text)
-		// @fixme: we'll ignore decode errors for now, just emit OpInvalid
+		insts, err := disassemble(text)
+		if err != nil {
+			fmt.Println(err)
+		}
 		for _, inst := range insts {
 			fmt.Println(InstructionFormatterWithOffset{inst})
 		}
