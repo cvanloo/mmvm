@@ -1,18 +1,18 @@
 package main
 
 import (
-	"unsafe"
+	"bytes"
+	"encoding/binary"
+	"errors"
+	"flag"
 	"fmt"
+	"log"
+	"math"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
-	"errors"
-	"encoding/binary"
-	"bytes"
-	"log"
-	"flag"
-	"runtime"
-	"math"
+	"unsafe"
 )
 
 // @todo: https://www.muppetlabs.com/~breadbox/txt/mopb.html
