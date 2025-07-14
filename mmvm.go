@@ -15,8 +15,12 @@ import (
 	"unsafe"
 )
 
+// @todo: implement other instructions
+// @todo: implement other syscalls
+// @todo: implement other interrupts? hw?
+// @todo: implement symbol table
+// @todo: implement segmented memory
 // @todo: https://www.muppetlabs.com/~breadbox/txt/mopb.html
-// @todo: AT&T syntax printing
 
 type (
 	// a.out header (format of executable files)
@@ -54,7 +58,6 @@ type (
 	}
 	Repeated struct {
 		operation Operation
-		operands  Operands
 	}
 	Register struct {
 		name, width byte
@@ -364,38 +367,35 @@ func (imm SignedImmediate) W() byte {
 }
 
 func (r Repeated) String() string {
-	if len(r.operands) > 0 {
-		return fmt.Sprintf("%s %s", r.operation, r.operands)
-	} else {
-		return fmt.Sprintf("%s", r.operation)
-	}
+	return fmt.Sprintf("%s", r.operation)
 }
 
 func (r Repeated) W() byte {
 	panic("nonsense calling W() on Repeated")
 }
 
-func (inst Instruction) String() string {
-	sizeSpecifier := func() string {
-		if len(inst.operands) >= 2 {
-			switch inst.operands[0].(type) {
-			case Memory:
-				switch imm := inst.operands[1].(type) {
-				case Immediate:
-					if imm.width == 0 {
-						return " byte"
-					}
-				case SignedImmediate:
-					if imm.width == 0 {
-						return " byte"
-					}
+func (inst Instruction) sizeSpecifier() string {
+	if len(inst.operands) >= 2 {
+		switch inst.operands[0].(type) {
+		case Memory:
+			switch imm := inst.operands[1].(type) {
+			case Immediate:
+				if imm.width == 0 {
+					return " byte"
+				}
+			case SignedImmediate:
+				if imm.width == 0 {
+					return " byte"
 				}
 			}
 		}
-		return ""
 	}
+	return ""
+}
+
+func (inst Instruction) String() string {
 	if len(inst.operands) > 0 {
-		return fmt.Sprintf("%-13x %s%s %s", inst.bytes[:inst.size], inst.operation, sizeSpecifier(), inst.operands)
+		return fmt.Sprintf("%-13x %s%s %s", inst.bytes[:inst.size], inst.operation, inst.sizeSpecifier(), inst.operands)
 	} else {
 		return fmt.Sprintf("%-13x %s", inst.bytes[:inst.size], inst.operation)
 	}
@@ -417,26 +417,8 @@ func (iswo InstructionFormatterWithOffset) String() string {
 
 func (iswma InstructionFormatterWithMemoryAccess) String() string {
 	printInst := func(inst Instruction) string {
-		sizeSpecifier := func() string {
-			if len(inst.operands) >= 2 {
-				switch inst.operands[0].(type) {
-				case Memory:
-					switch imm := inst.operands[1].(type) {
-					case Immediate:
-						if imm.width == 0 {
-							return " byte"
-						}
-					case SignedImmediate:
-						if imm.width == 0 {
-							return " byte"
-						}
-					}
-				}
-			}
-			return ""
-		}
 		if len(inst.operands) > 0 {
-			return fmt.Sprintf("%-13x%s%s %s", inst.bytes[:inst.size], inst.operation, sizeSpecifier(), inst.operands)
+			return fmt.Sprintf("%-13x%s%s %s", inst.bytes[:inst.size], inst.operation, inst.sizeSpecifier(), inst.operands)
 		} else {
 			return fmt.Sprintf("%-13x%s", inst.bytes[:inst.size], inst.operation)
 		}
@@ -528,10 +510,9 @@ func decodeImmediate(src *Source, width byte) Immediate {
 		data = (uint16(b2) << 8) ^ uint16(b1)
 	} else {
 		b1 := src.Next()
-		//data = uint16(int16(int8(b1)))
 		data = uint16(b1)
 	}
-	return Immediate{width: width, value: data} // @fixme: ?u?int16
+	return Immediate{width: width, value: data}
 }
 
 func decodeSignedImmediate(src *Source, width byte) SignedImmediate {
@@ -562,13 +543,10 @@ func decodeDispositionShort(src *Source) Immediate {
 }
 
 func decodeAddress(src *Source, width byte) Address {
-	// @fixme: instruction formatting????
-	//        mov byte opn1, opn2
-	//        mov word opn1, opn2
 	b1 := src.Next()
 	b2 := src.Next()
-	addr := (uint16(b2) << 8) ^ uint16(b1)
-	return Address{width: width, addr: int16(addr)} // @fixme: ?u?int16
+	addr := (int16(b2) << 8) ^ int16(b1)
+	return Address{width: width, addr: addr}
 }
 
 func decodeDirectIntersegment(src *Source) SegmentOffset {
@@ -594,7 +572,6 @@ func decodeModRegRm(src *Source, width byte) (oreg, orm Operand) {
 	case 0b01:
 		orm = Memory{width: width, mod: mod, rm: rm, dispHigh: 0, dispLow: src.Next()}
 	case 0b10:
-		// @fixme: will this code execute in the right order?
 		orm = Memory{width: width, mod: mod, rm: rm, dispLow: src.Next(), dispHigh: src.Next()}
 	case 0b11:
 		orm = Register{name: rm, width: width}
@@ -619,7 +596,6 @@ func decodeModSegRm(src *Source, width byte) (oreg, orm Operand) {
 	case 0b01:
 		orm = Memory{width: width, mod: mod, rm: rm, dispHigh: 0, dispLow: src.Next()}
 	case 0b10:
-		// @fixme: will this code execute in the right order?
 		orm = Memory{width: width, mod: mod, rm: rm, dispLow: src.Next(), dispHigh: src.Next()}
 	case 0b11:
 		orm = Register{name: rm, width: width}
@@ -638,10 +614,7 @@ func srcdst(d byte, op1, op2 Operand) Operands {
 var ErrDecode = errors.New("decode error")
 
 func decodeRepeated(src *Source) (repd Repeated, err error) {
-	var (
-		op  Operation
-		opn Operands
-	)
+	var op Operation
 	switch i1 := src.Next(); {
 	default:
 		err = fmt.Errorf("unrecognized opcode: %02x", i1)
@@ -666,16 +639,13 @@ func decodeRepeated(src *Source) (repd Repeated, err error) {
 	case i1 == 0b10100100: // movsb
 		op = OpMovsb
 	}
-	return Repeated{
-		operation: op,
-		operands:  opn,
-	}, err
+	return Repeated{operation: op}, err
 }
 
 func decode(src *Source) (inst Instruction, err error) {
 	defer func() {
-		r := recover()
-		if r != nil {
+		if r := recover(); r != nil {
+			// assumption: the only thing that could ever cause a panic is an array out-of-bounds access
 			bs, offset, size := src.Consume()
 			bytes := [6]byte{}
 			copy(bytes[:], bs)
@@ -686,7 +656,7 @@ func decode(src *Source) (inst Instruction, err error) {
 				operation: OpInvalid,
 				operands:  nil,
 			}
-			err = errors.Join(err, fmt.Errorf("panicked: %v", r))
+			err = errors.Join(err, ErrDecode)
 		}
 	}()
 	var (
@@ -2249,11 +2219,8 @@ func main() {
 
 	if *d {
 		text := exec.Text(bin)
-		insts, err := disassemble(text)
-		if err != nil {
-			//log.Fatal(err)
-			log.Println(err)
-		}
+		insts, _ := disassemble(text)
+		// @fixme: we'll ignore decode errors for now, just emit OpInvalid
 		for _, inst := range insts {
 			fmt.Println(InstructionFormatterWithOffset{inst})
 		}
