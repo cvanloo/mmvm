@@ -1176,6 +1176,9 @@ type (
 		Data         RAM
 		ProgramBreak uint16
 	}
+	Runtime interface {
+		Syscall(*CPU)
+	}
 	Flags struct {
 		reg *uint16
 	}
@@ -1409,7 +1412,19 @@ var (
 	ErrRegisterGP           = errors.New("register not for general purpose")
 )
 
-func (cpu *CPU) Step(inst Instruction) {
+func (cpu *CPU) interrupt(idx int32, rt Runtime) {
+	vector := [256]func(*CPU){
+		0x20: rt.Syscall, // syscall
+	}
+	f := vector[idx]
+	if f != nil {
+		f(cpu)
+	} else {
+		log.Printf("unhandled interrupt: %02x", idx)
+	}
+}
+
+func (cpu *CPU) Step(rt Runtime, inst Instruction) {
 	// @todo: processor exceptions?
 	isImm := func(opnd Operand) bool {
 		switch opnd.(type) {
@@ -1417,108 +1432,8 @@ func (cpu *CPU) Step(inst Instruction) {
 			return false
 		case Immediate:
 			return true
-			// @todo: or SignedImmediate
+		// @todo: or SignedImmediate
 		}
-	}
-	intVector := map[int32]func(*CPU){
-		0x20: func(cpu *CPU) { // syscall
-			sysVector := [78]func(*CPU) uint16{
-				0: func(*CPU) uint16 { // no_sys
-					return uint16(EINVAL)
-				},
-				1: func(cpu *CPU) uint16 { // exit
-					type Msg struct {
-						source, type_, code uint16
-					}
-					addr := cpu.RegisterFile[RegB]
-					bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
-					msg := (*Msg)(unsafe.Pointer(&bs[0]))
-					if *m {
-						fmt.Printf("<exit(%d)>\n", msg.code)
-					}
-					os.Exit(int(msg.code))
-					return msg.code
-				},
-				4: func(cpu *CPU) uint16 { // write
-					type Msg struct {
-						source, type_    uint16
-						fd, len, _, addr uint16
-					}
-					addr := cpu.RegisterFile[RegB]
-					bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
-					msg := (*Msg)(unsafe.Pointer(&bs[0]))
-					if *m {
-						fmt.Printf("<write(%d, 0x%04x, %d)", msg.fd, msg.addr, msg.len)
-					}
-					str := string(cpu.Data[msg.addr : msg.addr+msg.len])
-					fmt.Print(str)
-					ret := len(str)
-					if *m {
-						fmt.Printf(" => %d>\n", ret)
-					}
-					cpu.RegisterFile[RegA] = 0 // ?
-					return uint16(ret)
-				},
-				17: func(cpu *CPU) uint16 { // brk
-					type Msg struct {
-						source, type_ uint16
-						_             [6]byte
-						address       uint16
-						_             [6]byte
-						reply         uint16
-					}
-					addr := cpu.RegisterFile[RegB]
-					bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
-					msg := (*Msg)(unsafe.Pointer(&bs[0]))
-					if *m {
-						fmt.Printf("<brk(0x%04x) => ", msg.address)
-					}
-					ret := uint16(0)
-					if true { // @todo: checks???
-						cpu.ProgramBreak = msg.address
-						msg.reply = cpu.ProgramBreak
-						if *m {
-							fmt.Printf("0>\n")
-						}
-					} else {
-						ret = uint16(-ENOMEM)
-						msg.reply = 0xFFFF // -1
-						if *m {
-							fmt.Printf("ENOMEM>\n")
-						}
-					}
-					cpu.RegisterFile[RegA] = 0 // ?
-					return ret
-				},
-				54: func(cpu *CPU) uint16 { // ioctl
-					type Msg struct {
-						source  uint16
-						type_   uint16
-						fd      uint16
-						_       [2]byte
-						request uint16
-						_       [8]byte
-						address uint16
-					}
-					addr := cpu.RegisterFile[RegB]
-					bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
-					msg := (*Msg)(unsafe.Pointer(&bs[0]))
-					if *m {
-						fmt.Printf("<ioctl(%d, 0x%04x, 0x%04x)>\n", msg.fd, msg.request, msg.address)
-					}
-					cpu.RegisterFile[RegA] = 0 // ?
-					return uint16(-EINVAL)
-				},
-			}
-			type Msg struct {
-				source, type_ uint16
-			}
-			addr := cpu.RegisterFile[RegB]
-			bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
-			msg := (*Msg)(unsafe.Pointer(&bs[0]))
-			ret := sysVector[msg.type_](cpu)
-			msg.type_ = ret
-		},
 	}
 	switch inst.operation {
 	default:
@@ -2043,12 +1958,12 @@ func (cpu *CPU) Step(inst Instruction) {
 	//case OpLoopnz:
 	//case OpJcxz:
 	case OpIntType3:
-		intVector[3](cpu)
+		cpu.interrupt(3, rt)
 		// FLAGS none affected
 	case OpIntTypeSpecified:
 		t := inst.operands[0]
 		v := cpu.Get8(t)
-		intVector[v](cpu)
+		cpu.interrupt(v, rt)
 		// FLAGS none affected
 	//case OpInto:
 	//case OpIret:
@@ -2088,7 +2003,183 @@ var (
 	EINVAL = MinixError(22)
 )
 
-func (cpu *CPU) execve(argv, envp []string) {
+type Minix struct{}
+
+func (minix Minix) Syscall(cpu *CPU) {
+	noSys := func(*CPU) uint16 {
+		return uint16(EINVAL)
+	}
+	unImpl := noSys
+	vector := [78]func(*CPU) uint16{
+		0: noSys,
+		1: func(cpu *CPU) uint16 { // exit
+			type Msg struct {
+				source, type_, code uint16
+			}
+			addr := cpu.RegisterFile[RegB]
+			bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
+			msg := (*Msg)(unsafe.Pointer(&bs[0]))
+			if *m {
+				fmt.Printf("<exit(%d)>\n", msg.code)
+			}
+			os.Exit(int(msg.code))
+			return msg.code
+		},
+		2: unImpl, // fork
+		3: unImpl, // read
+		4: func(cpu *CPU) uint16 { // write
+			type Msg struct {
+				source, type_    uint16
+				fd, len, _, addr uint16
+			}
+			addr := cpu.RegisterFile[RegB]
+			bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
+			msg := (*Msg)(unsafe.Pointer(&bs[0]))
+			if *m {
+				fmt.Printf("<write(%d, 0x%04x, %d)", msg.fd, msg.addr, msg.len)
+			}
+			str := string(cpu.Data[msg.addr : msg.addr+msg.len])
+			fmt.Print(str)
+			ret := len(str)
+			if *m {
+				fmt.Printf(" => %d>\n", ret)
+			}
+			cpu.RegisterFile[RegA] = 0 // ?
+			return uint16(ret)
+		},
+		5: unImpl, // open
+		6: unImpl, // close
+		7: unImpl, // wait
+		8: unImpl, // creat
+		9: unImpl, // link
+		10: unImpl, // unlink
+		11: unImpl, // waitpid
+		12: unImpl, // chdir
+		13: unImpl, // time
+		14: unImpl, // mknod
+		15: unImpl, // chmod
+		16: unImpl, // chown
+		17: func(cpu *CPU) uint16 { // break
+			type Msg struct {
+				source, type_ uint16
+				_             [6]byte
+				address       uint16
+				_             [6]byte
+				reply         uint16
+			}
+			addr := cpu.RegisterFile[RegB]
+			bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
+			msg := (*Msg)(unsafe.Pointer(&bs[0]))
+			if *m {
+				fmt.Printf("<brk(0x%04x) => ", msg.address)
+			}
+			ret := uint16(0)
+			if true { // @todo: checks???
+				cpu.ProgramBreak = msg.address
+				msg.reply = cpu.ProgramBreak
+				if *m {
+					fmt.Printf("0>\n")
+				}
+			} else {
+				ret = uint16(-ENOMEM)
+				msg.reply = 0xFFFF // -1
+				if *m {
+					fmt.Printf("ENOMEM>\n")
+				}
+			}
+			cpu.RegisterFile[RegA] = 0 // ?
+			return ret
+		},
+		18: unImpl, // stat
+		19: unImpl, // lseek
+		20: unImpl, // getpid
+		21: unImpl, // mount
+		22: unImpl, // umount
+		23: unImpl, // setuid
+		24: unImpl, // getuid
+		25: unImpl, // stime
+		26: unImpl, // ptrace
+		27: unImpl, // alarm
+		28: unImpl, // fstat
+		29: unImpl, // pause
+		30: unImpl, // utime
+		31: unImpl, // (stty)
+		32: unImpl, // (gtty)
+		33: unImpl, // access
+		34: unImpl, // (nice)
+		35: unImpl, // (ftime)
+		36: unImpl, // sync
+		37: unImpl, // kill
+		38: unImpl, // rename
+		39: unImpl, // mkdir
+		40: unImpl, // rmdir
+		41: unImpl, // dup
+		42: unImpl, // pipe
+		43: unImpl, // times
+		44: unImpl, // (prof)
+		45: noSys, // unused
+		46: unImpl, // setgid
+		47: unImpl, // getgid
+		48: unImpl, // (signal)*/
+		49: noSys, // unused
+		50: noSys, // unused
+		51: unImpl, // (acct)
+		52: unImpl, // (phys)
+		53: unImpl, // (lock)
+		54: func(cpu *CPU) uint16 { // ioctl
+			type Msg struct {
+				source  uint16
+				type_   uint16
+				fd      uint16
+				_       [2]byte
+				request uint16
+				_       [8]byte
+				address uint16
+			}
+			addr := cpu.RegisterFile[RegB]
+			bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
+			msg := (*Msg)(unsafe.Pointer(&bs[0]))
+			if *m {
+				fmt.Printf("<ioctl(%d, 0x%04x, 0x%04x)>\n", msg.fd, msg.request, msg.address)
+			}
+			cpu.RegisterFile[RegA] = 0 // ?
+			return uint16(-EINVAL)
+		},
+		55: unImpl, // fnctl
+		56: unImpl, // (mpx)
+		57: noSys, // unused
+		58: noSys, // unused
+		59: unImpl, // execve
+		60: unImpl, // umask
+		61: unImpl, // chroot
+		62: unImpl, // setsid
+		63: unImpl, // getpgrp
+		64: unImpl, // KSIG
+		65: unImpl, // UNPAUSE
+		66: noSys, // unused
+		67: unImpl, // REVIVE
+		68: unImpl, // TASK_REPLY
+		69: unImpl, // unused
+		70: unImpl, // unused
+		71: unImpl, // sigaction
+		72: unImpl, // sigsuspend
+		73: unImpl, // sigpending
+		74: unImpl, // sigprocmask
+		75: unImpl, // sigreturn
+		76: unImpl, // reboot
+		77: unImpl, // svrctl
+	}
+	type Msg struct {
+		source, type_ uint16
+	}
+	addr := cpu.RegisterFile[RegB]
+	bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
+	msg := (*Msg)(unsafe.Pointer(&bs[0]))
+	ret := vector[msg.type_](cpu)
+	msg.type_ = ret
+}
+
+func (cpu *CPU) Execve(argv, envp []string) {
 	totalLen := 3 * uint16(2) // argc, two nil pointers
 	for _, s := range slices.Concat(envp, argv) {
 		totalLen += uint16(len(s)) + 1
@@ -2123,9 +2214,10 @@ func (cpu *CPU) execve(argv, envp []string) {
 
 func emulate(exec Exec, name string, bin []byte, args []string, debug bool) error {
 	cpu := &CPU{}
-	cpu.RegisterFile[RegSP] = 0xFFFF // 0xFFFE, 0x0000
+	rt := Minix{}
+	cpu.RegisterFile[RegSP] = 0xFFFF
 	// @note: Minix2:SYS/src/mm/exec.c +50
-	cpu.execve(append([]string{name}, args...), []string{"PATH=/usr:/usr/bin"})
+	cpu.Execve(append([]string{name}, args...), []string{"PATH=/usr:/usr/bin"})
 	// @todo: flags = 0x20 for separate text/data
 
 	/* Memory Layout
@@ -2168,10 +2260,9 @@ func emulate(exec Exec, name string, bin []byte, args []string, debug bool) erro
 			return err
 		}
 		if debug {
-			// @todo: print calculated address and read value for memory accesses
 			fmt.Printf("%s:%s\n", cpu, InstructionFormatterWithMemoryAccess{inst, cpu})
 		}
-		cpu.Step(inst)
+		cpu.Step(rt, inst)
 	}
 	return ErrHaltAndCatchFire
 }
