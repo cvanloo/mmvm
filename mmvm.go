@@ -41,20 +41,20 @@ type (
 		/* end of short form */
 	}
 	Operation int
-	Operand interface {
+	Operand   interface {
 		String() string
 		W() byte
 	}
-	Operands []Operand
+	Operands    []Operand
 	Instruction struct {
 		offset, size int
-		bytes [6]byte
-		operation Operation
-		operands Operands
+		bytes        [6]byte
+		operation    Operation
+		operands     Operands
 	}
 	Repeated struct {
 		operation Operation
-		operands Operands
+		operands  Operands
 	}
 	Register struct {
 		name, width byte
@@ -69,7 +69,7 @@ type (
 	// Absolute
 	Address struct { // @todo: do we really need this?
 		width byte
-		addr int16
+		addr  int16
 	}
 	// Segment:Offset
 	SegmentOffset struct { // @todo: where do we need this?
@@ -91,14 +91,14 @@ func (e Exec) BadMag() bool {
 
 func (e Exec) Text(bin []byte) []byte {
 	s := int32(e.MidMag.HdrLen)
-	text := bin[s:s+e.SizeText]
+	text := bin[s : s+e.SizeText]
 	return text
 }
 
 func (e Exec) Data(bin []byte) []byte {
 	s := int32(e.MidMag.HdrLen)
 	s += e.SizeText
-	data := bin[s:s+e.SizeData]
+	data := bin[s : s+e.SizeData]
 	return data
 }
 
@@ -113,10 +113,10 @@ const (
 	RegDI
 	RegFLAGS
 	RegIP
-	RegAH = RegSP
-	RegCH = RegBP
-	RegDH = RegSI
-	RegBH = RegDI
+	RegAH   = RegSP
+	RegCH   = RegBP
+	RegDH   = RegSI
+	RegBH   = RegDI
 	RegLast = RegIP
 )
 
@@ -129,144 +129,144 @@ const (
 
 //go:generate stringer -type=Operation -trimprefix=Op -linecomment
 const (
-	OpInvalid Operation = iota // (undefined)
-	OpMovRegRm                 // mov
-	OpMovRmImm                 // mov
-	OpMovRegImm                // mov
-	OpMovAccMem                // mov
-	OpMovMemAcc                // mov
-	OpMovRmSeg                 // mov
-	OpPushRm                   // push
-	OpPushReg                  // push
-	OpPushSeg                  // push
-	OpPopRm                    // pop
-	OpPopReg                   // pop
-	OpPopSeg                   // pop
-	OpXchgRmReg                // xchg
-	OpXchgAccReg               // xchg
-	OpInFixedPort              // in
-	OpInVarPort                // in
-	OpOutFixedPort             // out
-	OpOutVarPort               // out
-	OpXLAT                     // xlat
-	OpLEA                      // lea
-	OpLDS                      // lds
-	OpLES                      // les
-	OpLAHF                     // lahf
-	OpSAHF                     // sahf
-	OpPUSHF                    // pushf
-	OpPOPF                     // popf
-	OpAddRegRm                 // add
-	OpAddRmImm                 // add
-	OpAddAccImm                // add
-	OpAdcRegRm                 // adc
-	OpAdcRmImm                 // adc
-	OpAdcAccImm                // adc
-	OpIncRm                    // inc
-	OpIncReg                   // inc
-	OpAAA                      // aaa
-	OpBAA                      // baa
-	OpSubRegRm                 // sub
-	OpSubRmImm                 // sub
-	OpSubAccImm                // sub
-	OpSsbRegRm                 // sbb
-	OpSsbRmImm                 // sbb
-	OpSsbAccImm                // sbb
-	OpDecRm                    // dec
-	OpDecReg                   // dec
-	OpNeg                      // neg
-	OpCmpRegRm                 // cmp
-	OpCmpRmImm                 // cmp
-	OpCmpAccImm                // cmp
-	OpAAS                      // aas
-	OpDAS                      // das
-	OpMul                      // mul
-	OpImul                     // imul
-	OpAAM                      // aam
-	OpDiv                      // div
-	OpIdiv                     // idiv
-	OpAAD                      // aad
-	OpCBW                      // cbw
-	OpCWD                      // cwd
-	OpNot                      // not
-	OpShlSal                   // shl
-	OpShr                      // shr
-	OpSar                      // sar
-	OpRol                      // rol
-	OpRor                      // ror
-	OpRcl                      // rcl
-	OpRcr                      // rcr
-	OpAndRegRm                 // and
-	OpAndRmImm                 // and
-	OpAndAccImm                // and
-	OpTestRegRm                // test
-	OpTestRmImm                // test
-	OpTestAccImm               // test
-	OpOrRegRm                  // or
-	OpOrRmImm                  // or
-	OpOrAccImm                 // or
-	OpXorRegRm                 // xor
-	OpXorRmImm                 // xor
-	OpXorAccImm                // xor
-	OpRep                      // rep
-	OpMovsb                    // movsb
-	OpCmpsb                    // cmpsb
-	OpScasb                    // scasb
-	OpLodsb                    // lodsb
-	OpStosb                    // stosb
-	OpMovsw                    // movsw
-	OpCmpsw                    // cmpsw
-	OpScasw                    // scasw
-	OpLodsw                    // lodsw
-	OpStosw                    // stosw
-	OpCallDirSeg               // call
-	OpCallIndirSeg             // call
-	OpCallDirInterSeg          // call
-	OpCallIndirInterSeg        // call
-	OpJmpDirSeg                // jmp
-	OpJmpShortDirSeg           // jmp short
-	OpJmpIndirSeg              // jmp
-	OpJmpDirInterSeg           // jmp
-	OpJmpIndirInterSeg         // jmp
-	OpRetSeg                   // ret
-	OpRetSegImm                // ret
-	OpRetInterSeg              // ret
-	OpRetInterSegImm           // ret
-	OpJe                       // je
-	OpJl                       // jl
-	OpJle                      // jle
-	OpJb                       // jb
-	OpJbe                      // jbe
-	OpJp                       // jp
-	OpJo                       // jo
-	OpJs                       // js
-	OpJne                      // jne
-	OpJnl                      // jnl
-	OpJnle                     // jnle
-	OpJnb                      // jnb
-	OpJnbe                     // jnbe
-	OpJnp                      // jnp
-	OpJno                      // jno
-	OpJns                      // jns
-	OpLoop                     // loop
-	OpLoopz                    // loopz
-	OpLoopnz                   // loopnz
-	OpJcxz                     // jcxz
-	OpIntType3                 // int
-	OpIntTypeSpecified         // int
-	OpInto                     // into
-	OpIret                     // iret
-	OpClc                      // clc
-	OpCmc                      // cmc
-	OpStc                      // stc
-	OpCld                      // cld
-	OpStd                      // std
-	OpCli                      // cli
-	OpSti                      // sti
-	OpHlt                      // hlt
-	OpWait                     // wait
-	OpEsc                      // esc
-	OpLock                     // lock
+	OpInvalid           Operation = iota // (undefined)
+	OpMovRegRm                           // mov
+	OpMovRmImm                           // mov
+	OpMovRegImm                          // mov
+	OpMovAccMem                          // mov
+	OpMovMemAcc                          // mov
+	OpMovRmSeg                           // mov
+	OpPushRm                             // push
+	OpPushReg                            // push
+	OpPushSeg                            // push
+	OpPopRm                              // pop
+	OpPopReg                             // pop
+	OpPopSeg                             // pop
+	OpXchgRmReg                          // xchg
+	OpXchgAccReg                         // xchg
+	OpInFixedPort                        // in
+	OpInVarPort                          // in
+	OpOutFixedPort                       // out
+	OpOutVarPort                         // out
+	OpXLAT                               // xlat
+	OpLEA                                // lea
+	OpLDS                                // lds
+	OpLES                                // les
+	OpLAHF                               // lahf
+	OpSAHF                               // sahf
+	OpPUSHF                              // pushf
+	OpPOPF                               // popf
+	OpAddRegRm                           // add
+	OpAddRmImm                           // add
+	OpAddAccImm                          // add
+	OpAdcRegRm                           // adc
+	OpAdcRmImm                           // adc
+	OpAdcAccImm                          // adc
+	OpIncRm                              // inc
+	OpIncReg                             // inc
+	OpAAA                                // aaa
+	OpBAA                                // baa
+	OpSubRegRm                           // sub
+	OpSubRmImm                           // sub
+	OpSubAccImm                          // sub
+	OpSsbRegRm                           // sbb
+	OpSsbRmImm                           // sbb
+	OpSsbAccImm                          // sbb
+	OpDecRm                              // dec
+	OpDecReg                             // dec
+	OpNeg                                // neg
+	OpCmpRegRm                           // cmp
+	OpCmpRmImm                           // cmp
+	OpCmpAccImm                          // cmp
+	OpAAS                                // aas
+	OpDAS                                // das
+	OpMul                                // mul
+	OpImul                               // imul
+	OpAAM                                // aam
+	OpDiv                                // div
+	OpIdiv                               // idiv
+	OpAAD                                // aad
+	OpCBW                                // cbw
+	OpCWD                                // cwd
+	OpNot                                // not
+	OpShlSal                             // shl
+	OpShr                                // shr
+	OpSar                                // sar
+	OpRol                                // rol
+	OpRor                                // ror
+	OpRcl                                // rcl
+	OpRcr                                // rcr
+	OpAndRegRm                           // and
+	OpAndRmImm                           // and
+	OpAndAccImm                          // and
+	OpTestRegRm                          // test
+	OpTestRmImm                          // test
+	OpTestAccImm                         // test
+	OpOrRegRm                            // or
+	OpOrRmImm                            // or
+	OpOrAccImm                           // or
+	OpXorRegRm                           // xor
+	OpXorRmImm                           // xor
+	OpXorAccImm                          // xor
+	OpRep                                // rep
+	OpMovsb                              // movsb
+	OpCmpsb                              // cmpsb
+	OpScasb                              // scasb
+	OpLodsb                              // lodsb
+	OpStosb                              // stosb
+	OpMovsw                              // movsw
+	OpCmpsw                              // cmpsw
+	OpScasw                              // scasw
+	OpLodsw                              // lodsw
+	OpStosw                              // stosw
+	OpCallDirSeg                         // call
+	OpCallIndirSeg                       // call
+	OpCallDirInterSeg                    // call
+	OpCallIndirInterSeg                  // call
+	OpJmpDirSeg                          // jmp
+	OpJmpShortDirSeg                     // jmp short
+	OpJmpIndirSeg                        // jmp
+	OpJmpDirInterSeg                     // jmp
+	OpJmpIndirInterSeg                   // jmp
+	OpRetSeg                             // ret
+	OpRetSegImm                          // ret
+	OpRetInterSeg                        // ret
+	OpRetInterSegImm                     // ret
+	OpJe                                 // je
+	OpJl                                 // jl
+	OpJle                                // jle
+	OpJb                                 // jb
+	OpJbe                                // jbe
+	OpJp                                 // jp
+	OpJo                                 // jo
+	OpJs                                 // js
+	OpJne                                // jne
+	OpJnl                                // jnl
+	OpJnle                               // jnle
+	OpJnb                                // jnb
+	OpJnbe                               // jnbe
+	OpJnp                                // jnp
+	OpJno                                // jno
+	OpJns                                // jns
+	OpLoop                               // loop
+	OpLoopz                              // loopz
+	OpLoopnz                             // loopnz
+	OpJcxz                               // jcxz
+	OpIntType3                           // int
+	OpIntTypeSpecified                   // int
+	OpInto                               // into
+	OpIret                               // iret
+	OpClc                                // clc
+	OpCmc                                // cmc
+	OpStc                                // stc
+	OpCld                                // cld
+	OpStd                                // std
+	OpCli                                // cli
+	OpSti                                // sti
+	OpHlt                                // hlt
+	OpWait                               // wait
+	OpEsc                                // esc
+	OpLock                               // lock
 )
 
 func (ops Operands) String() string {
@@ -407,7 +407,7 @@ type (
 	}
 	InstructionFormatterWithMemoryAccess struct {
 		inst Instruction
-		cpu *CPU
+		cpu  *CPU
 	}
 )
 
@@ -467,30 +467,30 @@ func bitsExtract(s, m byte) func(byte) byte {
 }
 
 var (
-	W = bitsExtract(0, 1)
+	W    = bitsExtract(0, 1)
 	REG1 = bitsExtract(0, 0b111)
-	D = bitsExtract(1, 1)
-	S = D
-	V = D
-	MOD = bitsExtract(6, 0b11)
-	RM = bitsExtract(0, 0b111)
-	REG = bitsExtract(3, 0b111)
-	SEG = bitsExtract(3, 0b11)
+	D    = bitsExtract(1, 1)
+	S    = D
+	V    = D
+	MOD  = bitsExtract(6, 0b11)
+	RM   = bitsExtract(0, 0b111)
+	REG  = bitsExtract(3, 0b111)
+	SEG  = bitsExtract(3, 0b11)
 	WREG = func(i byte) (w, reg byte) {
 		return (i >> 3) & 1, i & 0b111
 	}
 	DW = func(i byte) (d, w byte) {
 		return D(i), W(i)
 	}
-	SW = DW
-	VW = DW
+	SW       = DW
+	VW       = DW
 	MODREGRM = func(i byte) (mod, reg, rm byte) {
 		return MOD(i), REG(i), RM(i)
 	}
 )
 
 type Source struct {
-	Text []byte
+	Text          []byte
 	Consumed, Pos int
 }
 
@@ -604,7 +604,7 @@ func decodeModRegRm(src *Source, width byte) (oreg, orm Operand) {
 
 func decodeModSegRm(src *Source, width byte) (oreg, orm Operand) {
 	mod, reg, rm := MODREGRM(src.Next())
-	if reg & 0b100 != 0 {
+	if reg&0b100 != 0 {
 		// @todo: error handling
 		reg = reg & 0b011
 	}
@@ -639,7 +639,7 @@ var ErrDecode = errors.New("decode error")
 
 func decodeRepeated(src *Source) (repd Repeated, err error) {
 	var (
-		op Operation
+		op  Operation
 		opn Operands
 	)
 	switch i1 := src.Next(); {
@@ -666,9 +666,9 @@ func decodeRepeated(src *Source) (repd Repeated, err error) {
 	case i1 == 0b10100100: // movsb
 		op = OpMovsb
 	}
-	return Repeated {
+	return Repeated{
 		operation: op,
-		operands: opn,
+		operands:  opn,
 	}, err
 }
 
@@ -679,18 +679,18 @@ func decode(src *Source) (inst Instruction, err error) {
 			bs, offset, size := src.Consume()
 			bytes := [6]byte{}
 			copy(bytes[:], bs)
-			inst = Instruction {
-				offset: offset,
-				size: size,
-				bytes: bytes,
+			inst = Instruction{
+				offset:    offset,
+				size:      size,
+				bytes:     bytes,
 				operation: OpInvalid,
-				operands: nil,
+				operands:  nil,
 			}
 			err = errors.Join(err, fmt.Errorf("panicked: %v", r))
 		}
 	}()
 	var (
-		op Operation
+		op  Operation
 		opn Operands
 	)
 	switch i1 := src.Next(); {
@@ -1075,7 +1075,7 @@ func decode(src *Source) (inst Instruction, err error) {
 			0b111: OpCmpRmImm,
 		}[REG(src.B(1))]
 		_, sMustBeZero := map[Operation]struct{}{
-			OpOrRmImm: {},
+			OpOrRmImm:  {},
 			OpAndRmImm: {},
 			OpXorRegRm: {},
 		}[op]
@@ -1178,12 +1178,12 @@ func decode(src *Source) (inst Instruction, err error) {
 	bs, offset, size := src.Consume()
 	bytes := [6]byte{}
 	copy(bytes[:], bs)
-	return Instruction {
-		offset: offset,
-		size: size,
-		bytes: bytes,
+	return Instruction{
+		offset:    offset,
+		size:      size,
+		bytes:     bytes,
 		operation: op,
-		operands: opn,
+		operands:  opn,
 	}, err
 }
 
@@ -1200,14 +1200,14 @@ func disassemble(text []byte) (insts []Instruction, disasErr error) {
 type (
 	CPU struct {
 		RegisterFile [10]uint16
-		Text RAM
-		Data RAM
+		Text         RAM
+		Data         RAM
 		ProgramBreak uint16
 	}
 	Flags struct {
 		reg *uint16
 	}
-	RAM [1<<32]byte
+	RAM [1 << 32]byte
 )
 
 func (r *RAM) WriteBytes(addr uint16, val []byte) {
@@ -1278,7 +1278,7 @@ func (cpu *CPU) Get8(opnd Operand) int32 {
 		panic(fmt.Errorf("invalid operand: %T", opnd))
 	case Register:
 		if o.width == 0 && o.name >= RegAH && o.name <= RegBH {
-			return int32(int8(cpu.RegisterFile[o.name - RegAH] >> 8))
+			return int32(int8(cpu.RegisterFile[o.name-RegAH] >> 8))
 		}
 		return int32(int8(cpu.RegisterFile[o.name]))
 	case Memory:
@@ -1297,7 +1297,7 @@ func (cpu *CPU) Get16(opnd Operand) int32 {
 		panic(fmt.Errorf("invalid operand: %T", opnd))
 	case Register:
 		if o.width == 0 && o.name >= RegAH && o.name <= RegBH {
-			return int32(int8(cpu.RegisterFile[o.name - RegAH] >> 8))
+			return int32(int8(cpu.RegisterFile[o.name-RegAH] >> 8))
 		}
 		return int32(int16(cpu.RegisterFile[o.name]))
 	case Memory:
@@ -1317,7 +1317,7 @@ func (cpu *CPU) Set8(opnd Operand, val int32) {
 	case Register:
 		if o.width == 0 && o.name >= RegAH && o.name <= RegBH {
 			// write to upper half does not zero the lower half
-			cpu.RegisterFile[o.name - RegAH] = uint16(val << 8) | (cpu.RegisterFile[o.name - RegAH] & 0x00FF)
+			cpu.RegisterFile[o.name-RegAH] = uint16(val<<8) | (cpu.RegisterFile[o.name-RegAH] & 0x00FF)
 		} else {
 			// write to lower half does not zero the upper half
 			cpu.RegisterFile[o.name] = (cpu.RegisterFile[o.name] & 0xFF00) | uint16(uint8(val))
@@ -1335,7 +1335,7 @@ func (cpu *CPU) Set16(opnd Operand, val int32) {
 	case Register:
 		if o.width == 0 && o.name >= RegAH && o.name <= RegBH {
 			// @fixme: should it even be valid to call Set16 on a 8-bit reg?
-			cpu.RegisterFile[o.name - RegAH] = uint16(val << 8) | (cpu.RegisterFile[o.name - RegAH] & 0x00FF)
+			cpu.RegisterFile[o.name-RegAH] = uint16(val<<8) | (cpu.RegisterFile[o.name-RegAH] & 0x00FF)
 		} else {
 			cpu.RegisterFile[o.name] = uint16(val)
 		}
@@ -1352,14 +1352,14 @@ func BaseOffset(cpu *CPU, i byte, disp int16) uint16 {
 		Base, Offset byte
 	}
 	names := []BaseOffset{
-		{RegB,  RegSI},
-		{RegB,  RegDI},
+		{RegB, RegSI},
+		{RegB, RegDI},
 		{RegBP, RegSI},
 		{RegBP, RegDI},
 		{RegSI, RegInv},
 		{RegDI, RegInv},
 		{RegBP, RegInv},
-		{RegB,  RegInv},
+		{RegB, RegInv},
 	}
 	bo := names[i]
 	base := int16(cpu.RegisterFile[bo.Base])
@@ -1367,7 +1367,7 @@ func BaseOffset(cpu *CPU, i byte, disp int16) uint16 {
 	if bo.Offset <= RegLast {
 		offset = int16(cpu.RegisterFile[bo.Offset])
 	}
-	return uint16(base+offset+disp)
+	return uint16(base + offset + disp)
 }
 
 func (mem Memory) Addr(cpu *CPU) uint16 {
@@ -1391,9 +1391,9 @@ func (mem Memory) Addr(cpu *CPU) uint16 {
 func (cpu *CPU) String() string {
 	flags := func(flags uint16) string {
 		s := []byte("----")
-		CF := (flags >>  0) & 1
-		ZF := (flags >>  6) & 1
-		SF := (flags >>  7) & 1
+		CF := (flags >> 0) & 1
+		ZF := (flags >> 6) & 1
+		SF := (flags >> 7) & 1
 		OF := (flags >> 11) & 1
 		if CF == 1 {
 			s[3] = 'C'
@@ -1410,7 +1410,7 @@ func (cpu *CPU) String() string {
 		return string(s)
 	}
 	return fmt.Sprintf(
-		"%04x %04x %04x %04x %04x %04x %04x %04x %s %04x", 
+		"%04x %04x %04x %04x %04x %04x %04x %04x %s %04x",
 		cpu.RegisterFile[RegA], cpu.RegisterFile[RegB], cpu.RegisterFile[RegC],
 		cpu.RegisterFile[RegD], cpu.RegisterFile[RegSP], cpu.RegisterFile[RegBP],
 		cpu.RegisterFile[RegSI], cpu.RegisterFile[RegDI],
@@ -1420,9 +1420,9 @@ func (cpu *CPU) String() string {
 
 func (cpu *CPU) Fetch() *Source {
 	return &Source{
-		Text: cpu.Text[:],
+		Text:     cpu.Text[:],
 		Consumed: int(cpu.RegisterFile[RegIP]),
-		Pos: int(cpu.RegisterFile[RegIP]),
+		Pos:      int(cpu.RegisterFile[RegIP]),
 	}
 }
 
@@ -1431,10 +1431,10 @@ func (cpu *CPU) Decode(src *Source) (Instruction, error) {
 }
 
 var (
-	ErrIllegalInstruction = errors.New("illegal instruction")
+	ErrIllegalInstruction   = errors.New("illegal instruction")
 	ErrOperandWidthMismatch = errors.New("operands differ in width")
-	ErrRegisterSize = errors.New("register of wrong size")
-	ErrRegisterGP = errors.New("register not for general purpose")
+	ErrRegisterSize         = errors.New("register of wrong size")
+	ErrRegisterGP           = errors.New("register not for general purpose")
 )
 
 func (cpu *CPU) Step(inst Instruction) {
@@ -1450,7 +1450,7 @@ func (cpu *CPU) Step(inst Instruction) {
 	}
 	intVector := map[int32]func(*CPU){
 		0x20: func(cpu *CPU) { // syscall
-			sysVector := [78]func(*CPU) uint16 {
+			sysVector := [78]func(*CPU) uint16{
 				0: func(*CPU) uint16 { // no_sys
 					return uint16(EINVAL)
 				},
@@ -1459,7 +1459,7 @@ func (cpu *CPU) Step(inst Instruction) {
 						source, type_, code uint16
 					}
 					addr := cpu.RegisterFile[RegB]
-					bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
+					bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
 					msg := (*Msg)(unsafe.Pointer(&bs[0]))
 					if *m {
 						fmt.Printf("<exit(%d)>\n", msg.code)
@@ -1469,16 +1469,16 @@ func (cpu *CPU) Step(inst Instruction) {
 				},
 				4: func(cpu *CPU) uint16 { // write
 					type Msg struct {
-						source, type_ uint16
-						fd, len, _, addr uint16 
+						source, type_    uint16
+						fd, len, _, addr uint16
 					}
 					addr := cpu.RegisterFile[RegB]
-					bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
+					bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
 					msg := (*Msg)(unsafe.Pointer(&bs[0]))
 					if *m {
 						fmt.Printf("<write(%d, 0x%04x, %d)", msg.fd, msg.addr, msg.len)
 					}
-					str := string(cpu.Data[msg.addr:msg.addr+msg.len])
+					str := string(cpu.Data[msg.addr : msg.addr+msg.len])
 					fmt.Print(str)
 					ret := len(str)
 					if *m {
@@ -1490,13 +1490,13 @@ func (cpu *CPU) Step(inst Instruction) {
 				17: func(cpu *CPU) uint16 { // brk
 					type Msg struct {
 						source, type_ uint16
-						_ [6]byte
-						address uint16
-						_ [6]byte
-						reply uint16
+						_             [6]byte
+						address       uint16
+						_             [6]byte
+						reply         uint16
 					}
 					addr := cpu.RegisterFile[RegB]
-					bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
+					bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
 					msg := (*Msg)(unsafe.Pointer(&bs[0]))
 					if *m {
 						fmt.Printf("<brk(0x%04x) => ", msg.address)
@@ -1520,16 +1520,16 @@ func (cpu *CPU) Step(inst Instruction) {
 				},
 				54: func(cpu *CPU) uint16 { // ioctl
 					type Msg struct {
-						source uint16
-						type_ uint16
-						fd uint16
-						_ [2]byte
+						source  uint16
+						type_   uint16
+						fd      uint16
+						_       [2]byte
 						request uint16
-						_ [8]byte
+						_       [8]byte
 						address uint16
 					}
 					addr := cpu.RegisterFile[RegB]
-					bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
+					bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
 					msg := (*Msg)(unsafe.Pointer(&bs[0]))
 					if *m {
 						fmt.Printf("<ioctl(%d, 0x%04x, 0x%04x)>\n", msg.fd, msg.request, msg.address)
@@ -1542,7 +1542,7 @@ func (cpu *CPU) Step(inst Instruction) {
 				source, type_ uint16
 			}
 			addr := cpu.RegisterFile[RegB]
-			bs := cpu.Data[addr:addr+uint16(unsafe.Sizeof(Msg{}))]
+			bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
 			msg := (*Msg)(unsafe.Pointer(&bs[0]))
 			ret := sysVector[msg.type_](cpu)
 			msg.type_ = ret
@@ -1757,13 +1757,13 @@ func (cpu *CPU) Step(inst Instruction) {
 			dividend := cpu.RegisterFile[RegA]
 			divisor := uint16(cpu.Get8(arg))
 			quotient := dividend / divisor
-			remainder := dividend - quotient * divisor
+			remainder := dividend - quotient*divisor
 			cpu.RegisterFile[RegA] = ((remainder << 8) & 0xFF00) | (quotient & 0x00FF)
 		case 1:
 			dividend := (uint32(cpu.RegisterFile[RegD]) << 8) | uint32(cpu.RegisterFile[RegA])
 			divisor := uint32(uint16(cpu.Get16(arg)))
 			quotient := dividend / divisor
-			remainder := dividend - quotient * divisor
+			remainder := dividend - quotient*divisor
 			cpu.RegisterFile[RegA] = uint16(quotient)
 			cpu.RegisterFile[RegD] = uint16(remainder)
 		}
@@ -1789,15 +1789,15 @@ func (cpu *CPU) Step(inst Instruction) {
 			b := cpu.Get8(c)
 			r := a << b
 			cpu.Set8(dst, r)
-			carry := ((a << (b-1)) >> 7) & 1
-			cpu.Flags().SetZSCO(r == 0, int8(r) < 0, carry == 1, ((r >> 7) & 1) != carry)
+			carry := ((a << (b - 1)) >> 7) & 1
+			cpu.Flags().SetZSCO(r == 0, int8(r) < 0, carry == 1, ((r>>7)&1) != carry)
 		case 1:
 			a := cpu.Get16(dst)
 			b := cpu.Get16(c)
 			r := a << b
 			cpu.Set16(dst, r)
-			carry := ((a << (b-1)) >> 15) & 1
-			cpu.Flags().SetZSCO(r == 0, int16(r) < 0, carry == 1, ((r >> 15) & 1) != carry)
+			carry := ((a << (b - 1)) >> 15) & 1
+			cpu.Flags().SetZSCO(r == 0, int16(r) < 0, carry == 1, ((r>>15)&1) != carry)
 		}
 	//case OpShr:
 	case OpSar:
@@ -1809,14 +1809,14 @@ func (cpu *CPU) Step(inst Instruction) {
 			b := cpu.Get8(c)
 			r := a >> b
 			cpu.Set8(dst, r)
-			carry := (a >> (b-1)) & 1
+			carry := (a >> (b - 1)) & 1
 			cpu.Flags().SetZSCO(r == 0, int8(r) < 0, carry == 1, (b != 1 && OF(cpu.RegisterFile[RegFLAGS]) == 1))
 		case 1:
 			a := cpu.Get16(dst)
 			b := cpu.Get16(c)
 			r := a >> b
 			cpu.Set16(dst, r)
-			carry := (a >> (b-1)) & 1
+			carry := (a >> (b - 1)) & 1
 			cpu.Flags().SetZSCO(r == 0, int16(r) < 0, carry == 1, (b != 1 && OF(cpu.RegisterFile[RegFLAGS]) == 1))
 		}
 	//case OpRol:
@@ -1915,7 +1915,7 @@ func (cpu *CPU) Step(inst Instruction) {
 	//case OpStosw:
 	case OpCallDirSeg, OpCallIndirSeg:
 		cpu.RegisterFile[RegSP] -= 2
-		cpu.Data.Write16(cpu.RegisterFile[RegSP], uint16(inst.offset + inst.size))
+		cpu.Data.Write16(cpu.RegisterFile[RegSP], uint16(inst.offset+inst.size))
 		arg := inst.operands[0]
 		addr := uint16(cpu.Get16(arg))
 		cpu.RegisterFile[RegIP] = addr
@@ -2103,7 +2103,7 @@ type MinixError int
 
 func (err MinixError) Error() string {
 	return "minix: " + map[int]string{
-		7: "argument list too long",
+		7:  "argument list too long",
 		12: "cannot allocate memory",
 		22: "invalid argument",
 	}[int(err)]
@@ -2111,24 +2111,25 @@ func (err MinixError) Error() string {
 
 // errno -l
 var (
-	E2BIG = MinixError(7)
+	E2BIG  = MinixError(7)
 	ENOMEM = MinixError(12)
 	EINVAL = MinixError(22)
 )
 
 func (cpu *CPU) execve(argv, envp []string) {
-	totalLen := 3*uint16(2) // argc, two nil pointers
+	totalLen := 3 * uint16(2) // argc, two nil pointers
 	for _, s := range slices.Concat(envp, argv) {
 		totalLen += uint16(len(s)) + 1
 		totalLen += 2
 	}
 	frame := cpu.RegisterFile[RegSP]
 	// padding for alignment if necessary
-	if (frame - totalLen) % 2 != 0 {
-		frame -= 1; cpu.Data.WriteZeros(frame, 1)
+	if (frame-totalLen)%2 != 0 {
+		frame -= 1
+		cpu.Data.WriteZeros(frame, 1)
 	}
 	//fmt.Printf("totalLen: %d, frameStart: %04x\n", totalLen, frame - totalLen)
-	addrs := make([]uint16, len(argv) + len(envp))
+	addrs := make([]uint16, len(argv)+len(envp))
 	ss := slices.Concat(argv, envp)
 	slices.Reverse(ss)
 	for i, s := range ss {
