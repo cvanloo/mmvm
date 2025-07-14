@@ -611,8 +611,6 @@ func srcdst(d byte, op1, op2 Operand) Operands {
 	}
 }
 
-var ErrDecode = errors.New("decode error")
-
 func decodeRepeated(src *Source) (repd Repeated, err error) {
 	var op Operation
 	switch i1 := src.Next(); {
@@ -656,7 +654,7 @@ func decode(src *Source) (inst Instruction, err error) {
 				operation: OpInvalid,
 				operands:  nil,
 			}
-			err = errors.Join(err, ErrDecode)
+			err = errors.Join(err, errors.New("unexpected EOF"))
 		}
 	}()
 	var (
@@ -721,13 +719,13 @@ func decode(src *Source) (inst Instruction, err error) {
 	case i1 == 0b11010101: // aad
 		i2 := src.Next()
 		if i2 != 0b00001010 {
-			err = ErrDecode
+			err = errors.New("expected 0b00001010")
 		}
 		op = OpAAD
 	case i1 == 0b11010100: // aam
 		i2 := src.Next()
 		if i2 != 0b00001010 {
-			err = ErrDecode
+			err = errors.New("expected 0b00001010")
 		}
 		op = OpAAM
 	case i1 == 0b11001111: // iret
@@ -1050,7 +1048,7 @@ func decode(src *Source) (inst Instruction, err error) {
 			OpXorRegRm: {},
 		}[op]
 		if sMustBeZero && s != 0 {
-			err = ErrDecode
+			err = errors.New("s bit must be 0")
 		}
 		d1 := src.Next()
 		data := int16(d1)
@@ -1148,6 +1146,9 @@ func decode(src *Source) (inst Instruction, err error) {
 	bs, offset, size := src.Consume()
 	bytes := [6]byte{}
 	copy(bytes[:], bs)
+	if op == OpInvalid {
+		opn = nil
+	}
 	return Instruction{
 		offset:    offset,
 		size:      size,
@@ -2220,7 +2221,7 @@ func main() {
 	if *d {
 		text := exec.Text(bin)
 		insts, _ := disassemble(text)
-		// @fixme: we'll ignore decode errors for now, just emit OpInvalid
+		// we'll ignore decode errors, just emit OpInvalid
 		for _, inst := range insts {
 			fmt.Println(InstructionFormatterWithOffset{inst})
 		}
