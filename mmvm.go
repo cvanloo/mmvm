@@ -20,6 +20,7 @@ import (
 // @todo: implement other interrupts? hw?
 // @todo: implement symbol table
 // @todo: implement segmented memory
+// @todo: proper handling of decode errors
 // @todo: https://www.muppetlabs.com/~breadbox/txt/mopb.html
 
 type (
@@ -680,7 +681,7 @@ func decode(src *Source) (inst Instruction, err error) {
 		op = OpHlt
 	case i1 == 0b11110000: // lock
 		op = OpLock
-	case i1 == 0b11101011: // jmp short ???
+	case i1 == 0b11101011: // jmp (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJmpShortDirSeg
 		opn = Operands{disp}
@@ -688,27 +689,27 @@ func decode(src *Source) (inst Instruction, err error) {
 		so := decodeDirectIntersegment(src)
 		op = OpJmpDirInterSeg
 		opn = Operands{so}
-	case i1 == 0b11101001: // jmp short label
+	case i1 == 0b11101001: // jmp (short) label
 		disp := decodeDisposition(src)
 		op = OpJmpDirSeg
 		opn = Operands{disp}
-	case i1 == 0b11101000: // call short label
+	case i1 == 0b11101000: // call (short) label
 		disp := decodeDisposition(src)
 		op = OpCallDirSeg
 		opn = Operands{disp}
-	case i1 == 0b11100011: // jcxz ???
+	case i1 == 0b11100011: // jcxz (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJcxz
 		opn = Operands{disp}
-	case i1 == 0b11100010: // loop ???
+	case i1 == 0b11100010: // loop rel8
 		disp := decodeDispositionShort(src)
 		op = OpLoop
 		opn = Operands{disp}
-	case i1 == 0b11100001: // loopz ???
+	case i1 == 0b11100001: // loopz rel8
 		disp := decodeDispositionShort(src)
 		op = OpLoopz
 		opn = Operands{disp}
-	case i1 == 0b11100000: // loopnz ???
+	case i1 == 0b11100000: // loopnz rel8
 		disp := decodeDispositionShort(src)
 		op = OpLoopnz
 		opn = Operands{disp}
@@ -730,29 +731,29 @@ func decode(src *Source) (inst Instruction, err error) {
 		op = OpIret
 	case i1 == 0b11001110: // into
 		op = OpInto
-	case i1 == 0b11001101: // int type
+	case i1 == 0b11001101: // int imm8
 		op = OpIntTypeSpecified
 		opn = Operands{Immediate{width: 0, value: uint16(src.Next())}}
 	case i1 == 0b11001100: // int 3
 		op = OpIntType3
 		// @todo: we could merge this together with OpIntTypeSpecified
-	case i1 == 0b11001011: // ret ???
+	case i1 == 0b11001011: // ret (far)
 		op = OpRetInterSeg
-	case i1 == 0b11001010: // ret @fixme: ???
+	case i1 == 0b11001010: // ret (far) imm16
 		data := decodeImmediate(src, 1)
 		op = OpRetInterSegImm
 		opn = Operands{data}
-	case i1 == 0b11000101: // lds reg, rm
+	case i1 == 0b11000101: // lds r16, rm16
 		reg, rm := decodeModRegRm(src, 1)
 		op = OpLDS
 		opn = Operands{reg, rm}
-	case i1 == 0b11000100: // les reg, rm
+	case i1 == 0b11000100: // les r16, rm16
 		reg, rm := decodeModRegRm(src, 1)
 		op = OpLES
 		opn = Operands{reg, rm}
-	case i1 == 0b11000011: // ret ???
+	case i1 == 0b11000011: // ret (near)
 		op = OpRetSeg
-	case i1 == 0b11000010: // ret imm
+	case i1 == 0b11000010: // ret (near) imm
 		data := decodeImmediate(src, 1)
 		op = OpRetSegImm
 		opn = Operands{data}
@@ -945,105 +946,105 @@ func decode(src *Source) (inst Instruction, err error) {
 		imm := decodeImmediate(src, w)
 		op = OpTestAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
-	case (i1 & 0b11111110) == 0b10100000: // mov ax, addr // mov al, addr
+	case (i1 & 0b11111110) == 0b10100000: // mov ax, m16 // mov al, m8
 		w := W(i1)
 		addr := decodeAddress(src, w)
 		op = OpMovAccMem
 		opn = Operands{Register{name: RegA, width: w}, addr}
-	case (i1 & 0b11111110) == 0b10000110: // xchg rm, reg
+	case (i1 & 0b11111110) == 0b10000110: // xchg rm8, r8 // xchg rm16, r16
 		w := W(i1)
 		reg, rm := decodeModRegRm(src, w)
 		op = OpXchgRmReg
 		opn = Operands{rm, reg}
-	case (i1 & 0b11111110) == 0b10000100: // test reg, rm
+	case (i1 & 0b11111110) == 0b10000100: // test r8, rm8 // test r16, rm16
 		w := W(i1)
 		reg, rm := decodeModRegRm(src, w)
 		op = OpTestRegRm
 		opn = Operands{reg, rm}
-	case (i1 & 0b11111110) == 0b00111100: // cmp ax, imm
+	case (i1 & 0b11111110) == 0b00111100: // cmp ax, imm16 // cmp al, imm8
 		w := W(i1)
 		imm := decodeImmediate(src, w)
 		op = OpCmpAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
-	case (i1 & 0b11111110) == 0b00110100: // xor ax, imm
+	case (i1 & 0b11111110) == 0b00110100: // xor ax, imm16 // xor al, imm8
 		w := W(i1)
 		imm := decodeImmediate(src, w)
 		op = OpXorAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
-	case (i1 & 0b11111110) == 0b00101100: // sub ax, imm
+	case (i1 & 0b11111110) == 0b00101100: // sub ax, imm16 // sub al, imm8
 		w := W(i1)
 		imm := decodeImmediate(src, w)
 		op = OpSubAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
-	case (i1 & 0b11111110) == 0b00100100: // and ax, imm
+	case (i1 & 0b11111110) == 0b00100100: // and ax, imm16 // and al, imm8
 		w := W(i1)
 		imm := decodeImmediate(src, w)
 		op = OpAndAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
-	case (i1 & 0b11111110) == 0b00010100: // adc ax, imm
+	case (i1 & 0b11111110) == 0b00010100: // adc ax, imm16 // adc al, imm8
 		w := W(i1)
 		imm := decodeImmediate(src, w)
 		op = OpAdcAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
-	case (i1 & 0b11111110) == 0b00001100: // or ax, imm
+	case (i1 & 0b11111110) == 0b00001100: // or ax, imm16 // or al, imm8
 		w := W(i1)
 		imm := decodeImmediate(src, w)
 		op = OpOrAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
-	case (i1 & 0b11111110) == 0b00000100: // add ax, imm
+	case (i1 & 0b11111110) == 0b00000100: // add ax, imm16 // add al, imm8
 		w := W(i1)
 		imm := decodeImmediate(src, w)
 		op = OpAddAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
-	case (i1 & 0b11111110) == 0b00011100: // sbb ax, imm
+	case (i1 & 0b11111110) == 0b00011100: // sbb ax, imm16 // sbb al, imm8
 		w := W(i1)
 		imm := decodeImmediate(src, w)
 		op = OpSsbAccImm
 		opn = Operands{Register{name: RegA, width: w}, imm}
-	case (i1 & 0b11111101) == 0b10001100: // mov rm, seg // mov seg, rm
+	case (i1 & 0b11111101) == 0b10001100: // mov rm16, sreg // mov sreg, rm16
 		d := D(i1)
 		seg, rm := decodeModSegRm(src, 1)
 		op = OpMovRmSeg
 		opn = srcdst(d, seg, rm)
-	case (i1 & 0b11111100) == 0b11010000: // {shl/sal,shr,sar,rol,ror,rcl,rcr} rm, 1 // {shl/sal,shr,sar,rol,ror,rcl,rcr} rm, reg
+	case (i1 & 0b11111100) == 0b11010000:
 		v, w := VW(i1)
 		_, rm := decodeModRegRm(src, w)
 		op = map[byte]Operation{
-			0b000: OpRol,
-			0b001: OpRor,
-			0b010: OpRcl,
-			0b011: OpRcr,
-			0b100: OpShlSal,
-			0b101: OpShr,
-			0b111: OpSar,
+			0b000: OpRol,    // rol rm8, 1 // rol rm16, 1 // rol rm8, CL
+			0b001: OpRor,    // ror rm8, 1 // ror rm16, 1 // ror rm8, CL
+			0b010: OpRcl,    // rcl rm8, 1 // rcl rm16, 1 // rcl rm8, CL
+			0b011: OpRcr,    // rcr rm8, 1 // rcr rm16, 1 // rcr rm8, CL
+			0b100: OpShlSal, // shl rm8, 1 // shl rm16, 1 // shl rm8, CL
+			0b101: OpShr,    // shr rm8, 1 // shr rm16, 1 // shr rm8, CL
+			0b111: OpSar,    // sar rm8, 1 // sar rm16, 1 // sar rm8, CL
 		}[REG(src.B(1))]
 		if v == 0 { // count is 1
 			opn = Operands{rm, SignedImmediate{width: w, value: 1}}
 		} else { // count is in CL
 			opn = Operands{rm, Register{name: RegC, width: 0}}
 		}
-	case (i1 & 0b11111100) == 0b10001000: // mov reg, rm // mov rm, reg
+	case (i1 & 0b11111100) == 0b10001000: // mov r8, rm8 // mov r16, rm16 // mov rm8, r8 // mov rm16, r16
 		d, w := DW(i1)
 		reg, rm := decodeModRegRm(src, w)
 		op = OpMovRegRm
 		opn = srcdst(d, rm, reg)
-	case (i1 & 0b11111100) == 0b10000000: // {add,adc,sub,sbb,cmp,and,or,xor} rm, imm
+	case (i1 & 0b11111100) == 0b10000000:
 		s, w := SW(i1)
 		_, rm := decodeModRegRm(src, w)
 		op = map[byte]Operation{
-			0b000: OpAddRmImm,
-			0b001: OpOrRmImm,
-			0b010: OpAdcRmImm,
-			0b011: OpSsbRmImm,
-			0b100: OpAndRmImm,
-			0b101: OpSubRmImm,
-			0b110: OpXorRegRm,
-			0b111: OpCmpRmImm,
+			0b000: OpAddRmImm, // add rm8, imm8 // add rm16, imm16
+			0b001: OpOrRmImm,  // or  rm8, imm8 // or  rm16, imm16
+			0b010: OpAdcRmImm, // adc rm8, imm8 // adc rm16, imm16
+			0b011: OpSsbRmImm, // sbb rm8, imm8 // sbb rm16, imm16
+			0b100: OpAndRmImm, // and rm8, imm8 // and rm16, imm16
+			0b101: OpSubRmImm, // sub rm8, imm8 // sub rm16, imm16
+			0b110: OpXorRmImm, // xor rm8, imm8 // xor rm16, imm16
+			0b111: OpCmpRmImm, // cmp rm8, imm8 // cmp rm16, imm16
 		}[REG(src.B(1))]
 		_, sMustBeZero := map[Operation]struct{}{
 			OpOrRmImm:  {},
 			OpAndRmImm: {},
-			OpXorRegRm: {},
+			OpXorRmImm: {},
 		}[op]
 		if sMustBeZero && s != 0 {
 			err = errors.New("s bit must be 0")
@@ -1063,80 +1064,81 @@ func decode(src *Source) (inst Instruction, err error) {
 			imm = Immediate{width: w, value: uint16(data)}
 		}
 		opn = Operands{rm, imm}
-	case (i1 & 0b11111100) == 0b00111000: // cmp reg, rm // cmp rm, reg
+	case (i1 & 0b11111100) == 0b00111000: // cmp r8, rm8 // cmp r16, rm16 // cmp rm8, r8 // cmp rm16, r16
 		d, w := DW(i1)
 		reg, rm := decodeModRegRm(src, w)
 		op = OpCmpRegRm
 		opn = srcdst(d, rm, reg)
-	case (i1 & 0b11111100) == 0b00110000: // xor reg, rm // xor rm, reg
+	case (i1 & 0b11111100) == 0b00110000: // xor r8, rm8 // xor r16, rm16 // xor rm8, r8 // xor rm16, r16
 		d, w := DW(i1)
 		reg, rm := decodeModRegRm(src, w)
 		op = OpXorRegRm
 		opn = srcdst(d, rm, reg)
-	case (i1 & 0b11111100) == 0b00101000: // sub reg, rm // sub rm, reg
+	case (i1 & 0b11111100) == 0b00101000: // sub r8, rm8 // sub r16, rm16 // sub rm8, r8 // sub rm16, r16
 		d, w := DW(i1)
 		reg, rm := decodeModRegRm(src, w)
 		op = OpSubRegRm
 		opn = srcdst(d, rm, reg)
-	case (i1 & 0b11111100) == 0b00100000: // and reg, rm // and rm, reg
+	case (i1 & 0b11111100) == 0b00100000: // and r8, rm8 // and r16, rm16 // and rm8, r8 // and rm16, r16
 		d, w := DW(i1)
 		reg, rm := decodeModRegRm(src, w)
 		op = OpAndRegRm
 		opn = srcdst(d, rm, reg)
-	case (i1 & 0b11111100) == 0b00011000: // sbb reg, rm // sbb rm, reg
+	case (i1 & 0b11111100) == 0b00011000: // sbb r8, rm8 // sbb r16, rm16 // sbb rm8, r8 // sbb rm16, r16
 		d, w := DW(i1)
 		reg, rm := decodeModRegRm(src, w)
 		op = OpSsbRegRm
 		opn = srcdst(d, rm, reg)
-	case (i1 & 0b11111100) == 0b00010000: // adc reg, rm // adc rm, reg
+	case (i1 & 0b11111100) == 0b00010000: // adc r8, rm8 // adc r16, rm16 // adc rm8, r8 // adc rm16, r16
 		d, w := DW(i1)
 		reg, rm := decodeModRegRm(src, w)
 		op = OpAdcRegRm
 		opn = srcdst(d, rm, reg)
-	case (i1 & 0b11111100) == 0b00001000: // or reg, rm // or rm, reg
+	case (i1 & 0b11111100) == 0b00001000: // or r8, rm8 // or r16, rm16 // or rm8, r8 // or rm16, r16
 		d, w := DW(i1)
 		reg, rm := decodeModRegRm(src, w)
 		op = OpOrRegRm
 		opn = srcdst(d, rm, reg)
-	case (i1 & 0b11111100) == 0: // add reg, rm // add rm, reg
+	case (i1 & 0b11111100) == 0: // add r8, rm8 // add r16, rm16 // add rm8, r8 // add rm16, r16
 		d, w := DW(i1)
 		reg, rm := decodeModRegRm(src, w)
 		op = OpAddRegRm
 		opn = srcdst(d, rm, reg)
-	case (i1 & 0b11111000) == 0b11011000: // esc rm // @fixme: device? nop?
+	case (i1 & 0b11111000) == 0b11011000: // esc rm16
+		// mod = 11 performs a nop
 		_, rm := decodeModRegRm(src, 1)
 		op = OpEsc
 		opn = Operands{rm}
-	case (i1 & 0b11111000) == 0b10010000: // xchg reg, ax
+	case (i1 & 0b11111000) == 0b10010000: // xchg r16, ax
 		reg := REG1(i1)
 		op = OpXchgAccReg
 		opn = Operands{Register{name: reg, width: 1}, Register{name: RegA, width: 1}}
-	case (i1 & 0b11111000) == 0b01011000: // pop reg
+	case (i1 & 0b11111000) == 0b01011000: // pop r16
 		reg := REG1(i1)
 		op = OpPopReg
 		opn = Operands{Register{name: reg, width: 1}}
-	case (i1 & 0b11111000) == 0b01010000: // push reg
+	case (i1 & 0b11111000) == 0b01010000: // push r16
 		reg := REG1(i1)
 		op = OpPushReg
 		opn = Operands{Register{name: reg, width: 1}}
-	case (i1 & 0b11111000) == 0b01001000: // dec reg
+	case (i1 & 0b11111000) == 0b01001000: // dec r16
 		reg := REG1(i1)
 		op = OpDecReg
 		opn = Operands{Register{name: reg, width: 1}}
-	case (i1 & 0b11111000) == 0b01000000: // inc reg
+	case (i1 & 0b11111000) == 0b01000000: // inc r16
 		reg := REG1(i1)
 		op = OpIncReg
 		opn = Operands{Register{name: reg, width: 1}}
-	case (i1 & 0b11110000) == 0b10110000: // mov reg, imm
+	case (i1 & 0b11110000) == 0b10110000: // mov r16, imm16 // mov r8, imm8
 		w, reg := WREG(i1)
 		imm := decodeImmediate(src, w)
 		op = OpMovRegImm
 		opn = Operands{Register{name: reg, width: w}, imm}
-	case (i1 & 0b11100111) == 0b00000111: // pop seg
+	case (i1 & 0b11100111) == 0b00000111: // pop sreg
 		seg := SEG(i1)
 		op = OpPopSeg
 		opn = Operands{Segment{name: seg}}
-	case (i1 & 0b11100111) == 0b00000110: // push seg
+	case (i1 & 0b11100111) == 0b00000110: // push sreg
 		seg := SEG(i1)
 		op = OpPushSeg
 		opn = Operands{Segment{name: seg}}
