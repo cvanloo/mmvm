@@ -395,7 +395,7 @@ func (inst Instruction) sizeSpecifier() string {
 }
 
 func (inst Instruction) String() string {
-	if len(inst.operands) > 0 {
+	if inst.operation != OpInvalid && len(inst.operands) > 0 {
 		return fmt.Sprintf("%-13x %s%s %s", inst.bytes[:inst.size], inst.operation, inst.sizeSpecifier(), inst.operands)
 	} else {
 		return fmt.Sprintf("%-13x %s", inst.bytes[:inst.size], inst.operation)
@@ -418,7 +418,7 @@ func (iswo InstructionFormatterWithOffset) String() string {
 
 func (iswma InstructionFormatterWithMemoryAccess) String() string {
 	printInst := func(inst Instruction) string {
-		if len(inst.operands) > 0 {
+		if inst.operation != OpInvalid && len(inst.operands) > 0 {
 			return fmt.Sprintf("%-13x%s%s %s", inst.bytes[:inst.size], inst.operation, inst.sizeSpecifier(), inst.operands)
 		} else {
 			return fmt.Sprintf("%-13x%s", inst.bytes[:inst.size], inst.operation)
@@ -1144,9 +1144,6 @@ func decode(src *Source) (inst Instruction, err error) {
 		opn = Operands{Segment{name: seg}}
 	}
 	bs, offset, size := src.Consume()
-	if op == OpInvalid {
-		opn = nil
-	}
 	inst = Instruction{
 		offset:    offset,
 		size:      size,
