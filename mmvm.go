@@ -800,75 +800,75 @@ func decode(src *Source) (inst Instruction, err error) {
 		op = OpCWD
 	case i1 == 0b10011000: // cbw
 		op = OpCBW
-	case i1 == 0b10001111: // pop rm
-		_, rm := decodeModRegRm(src, 1) // @todo: we *could* verify that the reg part is 000 [:reg-000:]
+	case i1 == 0b10001111: // pop rm16
+		_, rm := decodeModRegRm(src, 1) // @fixme: we *could* verify that the reg part is 000 [:reg-000:]
 		op = OpPopRm
 		opn = Operands{rm}
-	case i1 == 0b10001101: // lea reg, rm
+	case i1 == 0b10001101: // lea r16, rm16
 		reg, rm := decodeModRegRm(src, 1)
 		op = OpLEA
 		opn = Operands{reg, rm}
-	case i1 == 0b01111111: // jnle ???
+	case i1 == 0b01111111: // jnle (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJnle
 		opn = Operands{disp}
-	case i1 == 0b01111110: // jle ???
+	case i1 == 0b01111110: // jle(short) rel8 
 		disp := decodeDispositionShort(src)
 		op = OpJle
 		opn = Operands{disp}
-	case i1 == 0b01111101: // jnl ???
+	case i1 == 0b01111101: // jnl (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJnl
 		opn = Operands{disp}
-	case i1 == 0b01111100: // jl ???
+	case i1 == 0b01111100: // jl (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJl
 		opn = Operands{disp}
-	case i1 == 0b01111011: // jnp ???
+	case i1 == 0b01111011: // jnp (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJnp
 		opn = Operands{disp}
-	case i1 == 0b01111010: // jp ???
+	case i1 == 0b01111010: // jp (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJp
 		opn = Operands{disp}
-	case i1 == 0b01111001: // jns ???
+	case i1 == 0b01111001: // jns (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJns
 		opn = Operands{disp}
-	case i1 == 0b01111000: // js ???
+	case i1 == 0b01111000: // js (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJs
 		opn = Operands{disp}
-	case i1 == 0b01110111: // jnbe ???
+	case i1 == 0b01110111: // jnbe (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJnbe
 		opn = Operands{disp}
-	case i1 == 0b01110110: // jbe ???
+	case i1 == 0b01110110: // jbe (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJbe
 		opn = Operands{disp}
-	case i1 == 0b01110101: // jne ???
+	case i1 == 0b01110101: // jne (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJne
 		opn = Operands{disp}
-	case i1 == 0b01110100: // je ???
+	case i1 == 0b01110100: // je (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJe
 		opn = Operands{disp}
-	case i1 == 0b01110011: // jnb ???
+	case i1 == 0b01110011: // jnb (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJnb
 		opn = Operands{disp}
-	case i1 == 0b01110010: // jb ???
+	case i1 == 0b01110010: // jb (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJb
 		opn = Operands{disp}
-	case i1 == 0b01110001: // jno ???
+	case i1 == 0b01110001: // jno (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJno
 		opn = Operands{disp}
-	case i1 == 0b01110000: // jo ???
+	case i1 == 0b01110000: // jo (short) rel8
 		disp := decodeDispositionShort(src)
 		op = OpJo
 		opn = Operands{disp}
@@ -885,63 +885,68 @@ func decode(src *Source) (inst Instruction, err error) {
 		_, rm := decodeModRegRm(src, w)
 		// @todo: validate that in all cases except for IncRm and DecRm w is always 1
 		op = map[byte]Operation{
-			0b000: OpIncRm,
-			0b001: OpDecRm,
-			0b010: OpCallIndirSeg,
-			0b011: OpCallIndirInterSeg,
-			0b100: OpJmpIndirSeg,
-			0b101: OpJmpIndirInterSeg,
-			0b110: OpPushRm,
+			0b000: OpIncRm,             // inc rm16 // inc rm8
+			0b001: OpDecRm,             // dec rm16 // dec rm8
+			0b010: OpCallIndirSeg,      // call (short) rm16
+			0b011: OpCallIndirInterSeg, // call (far)   rm16
+			0b100: OpJmpIndirSeg,       // jmp  (short) rm16
+			0b101: OpJmpIndirInterSeg,  // jmp  (far)   rm16
+			0b110: OpPushRm,            // push rm16
 		}[REG(src.B(1))]
 		opn = Operands{rm}
-	case (i1 & 0b11111110) == 0b11110110: // {test,not,neg,mul,imul,div,idiv} ???
+	case (i1 & 0b11111110) == 0b11110110:
 		w := W(i1)
 		_, rm := decodeModRegRm(src, w)
 		op = map[byte]Operation{
-			0b000: OpTestRmImm,
-			0b010: OpNot,
-			0b011: OpNeg,
-			0b100: OpMul,
-			0b101: OpImul,
-			0b110: OpDiv,
-			0b111: OpIdiv,
+			0b000: OpTestRmImm, // test rm16, imm16 // test rm8, imm8
+			0b010: OpNot,       // not  rm16 // not  rm8
+			0b011: OpNeg,       // neg  rm16 // neg  rm8
+			0b100: OpMul,       // mul  rm16 // mul  rm8
+			0b101: OpImul,      // imul rm16 // imul rm8
+			0b110: OpDiv,       // div  rm16 // div  rm8
+			0b111: OpIdiv,      // idiv rm16 // idiv rm8
 		}[REG(src.B(1))]
 		opn = Operands{rm}
 		if op == OpTestRmImm {
 			opn = append(opn, decodeImmediate(src, w))
 		}
-	case (i1 & 0b11111110) == 0b11110010: // rep <string instruction>
+	case (i1 & 0b11111110) == 0b11110010: // rep<cc> <string instruction>
 		z := W(i1)
 		op = OpRep
 		var repd Operand
 		repd, err = decodeRepeated(src)
 		opn = Operands{repd}
-		_ = z // @fixme: the heck is z?
-	case (i1 & 0b11111110) == 0b11101110: // out ???
-		//w := W(i1)
+		_ = z
+		// @fixme: z is used for comparison with ZF flag
+		// repe <=> repz
+		// repne <=> repnz
+		// rep applies to ins, outs, movs, lods, stods
+		// rep{e,z,ne,nz} applies to cmps, scas
+	case (i1 & 0b11111110) == 0b11101110: // out dx, al // out dx, ax
+		w := W(i1)
 		op = OpOutVarPort
-		// @fixme: operands?
-	case (i1 & 0b11111110) == 0b11101100: // in ax, ds // in al, ds
+		opn = Operands{Register{name: RegD, width: 1}, Register{name: RegA, width: w}}
+	case (i1 & 0b11111110) == 0b11101100: // in ax, dx // in al, dx
 		w := W(i1)
 		op = OpInVarPort
 		opn = Operands{Register{name: RegA, width: w}, Register{name: RegD, width: 1}}
-	case (i1 & 0b11111110) == 0b11100110: // out ax, imm // out al, imm
+	case (i1 & 0b11111110) == 0b11100110: // out imm8, ax // out imm8, al
 		w := W(i1)
 		port := uint16(src.Next()) // don't sign extend
 		op = OpOutFixedPort
-		opn = Operands{Register{name: RegA, width: w}, Immediate{width: w, value: port}}
-	case (i1 & 0b11111110) == 0b11100100: // in ax, imm // in al, imm
+		opn = Operands{Immediate{width: 0, value: port}, Register{name: RegA, width: w}}
+	case (i1 & 0b11111110) == 0b11100100: // in ax, imm8 // in al, imm8
 		w := W(i1)
 		port := int16(src.Next()) // don't sign extend
 		op = OpInFixedPort
 		opn = Operands{Register{name: RegA, width: w}, SignedImmediate{width: w, value: port}}
-	case (i1 & 0b11111110) == 0b11000110: // mov rm, imm
+	case (i1 & 0b11111110) == 0b11000110: // mov rm8, imm8 // mov rm16, imm16
 		w := W(i1)
 		_, rm := decodeModRegRm(src, w) // @todo: we *could* verify that reg part is 000 [:reg-000:]
 		imm := decodeImmediate(src, w)
 		op = OpMovRmImm
 		opn = Operands{rm, imm}
-	case (i1 & 0b11111110) == 0b10101000: // test ax, imm
+	case (i1 & 0b11111110) == 0b10101000: // test ax, imm16 // test al, imm8
 		w := W(i1)
 		imm := decodeImmediate(src, w)
 		op = OpTestAccImm
