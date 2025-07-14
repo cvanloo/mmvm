@@ -645,15 +645,13 @@ func decode(src *Source) (inst Instruction, err error) {
 		if r := recover(); r != nil {
 			// assumption: the only thing that could ever cause a panic is an array out-of-bounds access
 			bs, offset, size := src.Consume()
-			bytes := [6]byte{}
-			copy(bytes[:], bs)
 			inst = Instruction{
 				offset:    offset,
 				size:      size,
-				bytes:     bytes,
 				operation: OpInvalid,
 				operands:  nil,
 			}
+			copy(inst.bytes[:], bs)
 			err = errors.Join(err, errors.New("unexpected EOF"))
 		}
 	}()
@@ -1144,18 +1142,17 @@ func decode(src *Source) (inst Instruction, err error) {
 		opn = Operands{Segment{name: seg}}
 	}
 	bs, offset, size := src.Consume()
-	bytes := [6]byte{}
-	copy(bytes[:], bs)
 	if op == OpInvalid {
 		opn = nil
 	}
-	return Instruction{
+	inst = Instruction{
 		offset:    offset,
 		size:      size,
-		bytes:     bytes,
 		operation: op,
 		operands:  opn,
-	}, err
+	}
+	copy(inst.bytes[:], bs)
+	return inst, err
 }
 
 func disassemble(text []byte) (insts []Instruction, disasErr error) {
