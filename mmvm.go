@@ -15,6 +15,7 @@ import (
 	"unsafe"
 )
 
+// @todo: implement other flags
 // @todo: implement other instructions
 // @todo: implement other syscalls
 // @todo: implement other interrupts? hw?
@@ -1221,8 +1222,13 @@ func flagExtract(offset byte) func(uint16) uint16 {
 
 var (
 	CF = flagExtract(0)
+	PF = flagExtract(2)
+	AF = flagExtract(4)
 	ZF = flagExtract(6)
 	SF = flagExtract(7)
+	TF = flagExtract(8)
+	IF = flagExtract(9)
+	DF = flagExtract(10)
 	OF = flagExtract(11)
 )
 
@@ -1365,24 +1371,34 @@ func (mem Memory) Addr(cpu *CPU) uint16 {
 
 func (cpu *CPU) String() string {
 	flags := func(flags uint16) string {
-		s := []byte("----")
-		CF := (flags >> 0) & 1
-		ZF := (flags >> 6) & 1
-		SF := (flags >> 7) & 1
-		OF := (flags >> 11) & 1
-		if CF == 1 {
-			s[3] = 'C'
+		fmt := func(s []byte, bs []uint16) string {
+			for i, b := range bs {
+				if b != 1 {
+					s[i] = '-'
+				}
+			}
+			return string(s)
 		}
-		if ZF == 1 {
-			s[2] = 'Z'
+		if *compat {
+			return fmt([]byte("OSZC"), []uint16{
+				OF(flags),
+				SF(flags),
+				ZF(flags),
+				CF(flags),
+			})
+		} else {
+			return fmt([]byte("ODITSZAPC"), []uint16{
+				OF(flags),
+				DF(flags),
+				IF(flags),
+				TF(flags),
+				SF(flags),
+				ZF(flags),
+				AF(flags),
+				PF(flags),
+				CF(flags),
+			})
 		}
-		if SF == 1 {
-			s[1] = 'S'
-		}
-		if OF == 1 {
-			s[0] = 'O'
-		}
-		return string(s)
 	}
 	return fmt.Sprintf(
 		"%04x %04x %04x %04x %04x %04x %04x %04x %s %04x",
@@ -1497,7 +1513,7 @@ func (cpu *CPU) Step(rt Runtime, inst Instruction) {
 	case OpLEA:
 		reg := inst.operands[0].(Register)
 		mem := inst.operands[1].(Memory)
-		assert(reg.IsGeneralPurpose(), ErrRegisterGP)
+		//assert(reg.IsGeneralPurpose(), ErrRegisterGP)
 		assert(reg.width == 1, ErrRegisterSize)
 		cpu.Set16(reg, int32(mem.Addr(cpu)))
 		// FLAGS none affected
@@ -2283,6 +2299,7 @@ func must[T any](t T, err error) T {
 
 var d = flag.Bool("d", false, "disassemble")
 var m = flag.Bool("m", false, "debug")
+var compat = flag.Bool("compat", true, "format output the same way as the reference mmvm implementation by FUKUDA Hiroaki")
 
 func init() {
 	flag.Usage = func() {
