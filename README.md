@@ -420,7 +420,7 @@ func (mem Memory) String() string {
 }
 ```
 
-Depending on the `mod`, the disposition valuse have to be interpreted in different ways.
+Depending on the `mod`, the disposition values have to be interpreted in different ways.
 This method basically encodes what is described in the "NOTES:" section on the last page of the 8086 specification:
 
 ![A screenshot from the NOTES section of the last page of the 8086 specification.](./8086_spec_notes.png)
@@ -473,7 +473,7 @@ func decodeDisposition(src *Source) Immediate {
 ```
 
 `decodeDisposition` is used for instructions encoding an address as a relative offset.
-(Which is why `src.Pos` is added to the decoded disposition, to obtain the effective address.)
+(Which is why `src.Pos`, the position in the instruction stream, is added to the decoded disposition, to obtain the effective address.)
 
 There are a few more such helper functions, last but not least `decodeModRegRm`:
 
@@ -664,7 +664,29 @@ func disassemble(text []byte) (insts []Instruction, disasErr error) {
 Disassembly does *not* stop at the first error.
 We try to process the entire `text` section, and simply gather up all errors encountered.
 
+There is a script called `make_test.sh` which can be invoked using:
+
+```sh
+./make_test.sh all ; echo $?
+A=test_programs/1.out ./make_test.sh
+```
+
+This script will compare the output of my implementation against the output of professor FUKUDA Hiroaki's implementation and produce a diff.
+
+The diff can be opened in a diff viewer, for example, Meld.
+
+```sh
+meld mine.disas other.disas
+```
+
+I used this during development to verify the correctness of my implementation.
+
 ### Interpreter
+
+
+
+
+
 
 
 ---
