@@ -228,6 +228,7 @@ for _, inst := range insts {
 
 <details>
 <summary>Go slices</summary>
+
 A slice in go is a builtin data type, that consists of a pointer to the underlaying array, a length, and a capacity.
 
 Slices are a bit weird, in as much as that they serve two different purposes.
@@ -272,6 +273,7 @@ const (
 
 <details>
 <summary>Enums in Go</summary>
+
 Go doesn't really have enums.
 Instead, enums are encoded as a newtype (`type MyEnum int`) and a bunch of constants.
 Constants can be "initialized" using `iota`, which will simply assign numbers in increasing order.
@@ -287,6 +289,7 @@ const (
 
 <details>
 <summary>Code generating using `//go:generate`</summary>
+
 Notice the line comment starting with `//go:generate stringer`.
 
 The `Operation` enum values are just integers.
@@ -589,6 +592,7 @@ This will catch the panic induced by the out-of-bounds read and instead emit an 
 
 <details>
 <summary>Deferred functions, named return values, and panic/recover</summary>
+
 The `defer` keyword is used to register functions that will run *when* the current function returns.
 If there are multiple deferred functions, they will be executed in opposite order in which they had been deferred. (Kind of like LIFO.)
 
