@@ -683,23 +683,409 @@ I used this during development to verify the correctness of my implementation.
 
 ### Interpreter
 
+Definition of the `CPU` structure:
 
-
-
-
-
-
----
-
-```sh
-./make_test.sh all
-MODE=-m ./make_test.sh all
+```go
+type (
+	CPU struct {
+		RegisterFile [10]uint16
+		Text         RAM
+		Data         RAM
+		ProgramBreak uint16
+	}
+	Runtime interface {
+		Syscall(*CPU)
+	}
+	Flags struct {
+		reg *uint16
+	}
+	RAM [1 << 32]byte
+)
 ```
 
----
+Entry to the interpreter is the `emulate` function:
+
+```go
+var ErrHaltAndCatchFire = errors.New("halted and on fire")
+
+func emulate(exec Exec, name string, bin []byte, args []string, debug bool) error {
+	cpu := &CPU{}
+	rt := Minix{}
+	cpu.RegisterFile[RegSP] = 0xFFFF
+	cpu.Execve(append([]string{name}, args...), []string{"PATH=/usr:/usr/bin"})
+	text := exec.Text(bin)
+	data := exec.Data(bin)
+	cpu.Text.WriteBytes(0, text)
+	off := uint16(0)
+	cpu.Data.WriteBytes(off, data); off += uint16(len(data))
+	cpu.Data.WriteZeros(off, uint16(exec.SizeBSS)); off += uint16(exec.SizeBSS)
+	cpu.RegisterFile[RegIP] = uint16(exec.EntryPoint)
+	if debug {
+		fmt.Println(" AX   BX   CX   DX   SP   BP   SI   DI  FLAGS IP")
+	}
+	for {
+		src := cpu.Fetch()
+		inst, err := cpu.Decode(src)
+		if err != nil {
+			return err
+		}
+		if debug {
+			fmt.Printf("%s:%s\n", cpu, InstructionFormatterWithMemoryAccess{inst, cpu})
+		}
+		cpu.Step(rt, inst)
+	}
+	return ErrHaltAndCatchFire
+}
+```
+
+This loads the text and data sections into memory, sets up the stack, and initializes registers.
+
+In a loop, we fetch the next instruction `cpu.Fetch()`, decode it `cpu.Decode(src)`, print out some debug output if the `-m` flag was set, and execute the instruction `cpu.Step(rt, inst)`.
+
+Setup of the stack is done by the `Execve` method:
+
+```go
+func (cpu *CPU) Execve(argv, envp []string) {
+	totalLen := 3 * uint16(2) // argc, two nil pointers
+	for _, s := range slices.Concat(envp, argv) {
+		totalLen += uint16(len(s)) + 1
+		totalLen += 2
+	}
+	frame := cpu.RegisterFile[RegSP]
+	// padding for alignment if necessary
+	if (frame-totalLen)%2 != 0 {
+		frame -= 1
+		cpu.Data.WriteZeros(frame, 1)
+	}
+	addrs := make([]uint16, len(argv)+len(envp))
+	ss := slices.Concat(argv, envp)
+	slices.Reverse(ss)
+	for i, s := range ss {
+		frame -= uint16(len(s)) + 1
+		cpu.Data.WriteString(frame, s)
+		addrs[i] = frame
+	}
+	frame -= 2; cpu.Data.Write16(frame, 0)
+	for _, p := range addrs[:len(envp)] {
+		frame -= 2; cpu.Data.Write16(frame, p)
+	}
+	frame -= 2; cpu.Data.Write16(frame, 0)
+	for _, p := range addrs[len(envp):] {
+		frame -= 2; cpu.Data.Write16(frame, p)
+	}
+	frame -= 2; cpu.Data.Write16(frame, uint16(len(argv)))
+	cpu.RegisterFile[RegSP] = frame
+}
+```
+
+This sets up the stack in the same way that Minix2 would do it.
+The number of arguments (argc), pointers to the argument strings, pointers to the environment strings, the actual argument strings and the actual environment strings.
+
+The `Step` method takes an instruction and executes it:
+
+```go
+func (cpu *CPU) Step(rt Runtime, inst Instruction) {
+	switch inst.operation {
+	default:
+		fallthrough
+	case OpInvalid:
+		assert(false, ErrIllegalInstruction)
+	case OpMovRegRm, OpMovRmImm, OpMovRegImm, OpMovAccMem, OpMovMemAcc, OpMovRmSeg:
+		dst := inst.operands[0]
+		src := inst.operands[1]
+		switch {
+		default:
+			panic(ErrOperandWidthMismatch)
+		case dst.W() == 0 && src.W() == 0:
+			cpu.Set8(dst, cpu.Get8(src))
+		case dst.W() == 1 && src.W() == 1:
+			cpu.Set16(dst, cpu.Get16(src))
+		}
+		// FLAGS none affected
+	case OpPushRm, OpPushReg, OpPushSeg:
+		arg := inst.operands[0]
+		cpu.RegisterFile[RegSP] -= 2
+		switch arg.W() {
+		case 0:
+			cpu.Data.Write16(cpu.RegisterFile[RegSP], uint16(cpu.Get8(arg)))
+		case 1:
+			cpu.Data.Write16(cpu.RegisterFile[RegSP], uint16(cpu.Get16(arg)))
+		}
+		// FLAGS none affected
+	case OpAdcRegRm, OpAdcRmImm, OpAdcAccImm:
+		dst := inst.operands[0]
+		src := inst.operands[1]
+		c := int32(CF(cpu.RegisterFile[RegFLAGS]))
+		switch {
+		default:
+			panic(ErrOperandWidthMismatch)
+		case dst.W() == 0 && src.W() == 0:
+			r := cpu.Get8(dst) + cpu.Get8(src) + c
+			cpu.Set8(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, r > math.MaxUint8, r > math.MaxInt8 || r < math.MinInt8)
+		case dst.W() == 1 && src.W() == 1:
+			r := cpu.Get16(dst) + cpu.Get16(src) + c
+			cpu.Set16(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, r > math.MaxUint16, r > math.MaxInt16 || r < math.MinInt16)
+		case dst.W() == 1 && src.W() == 0 && isImm(src):
+			r := cpu.Get16(dst) + cpu.Get8(src) + c
+			cpu.Set8(dst, r)
+			cpu.Flags().SetZSCO(r == 0, r < 0, r > math.MaxUint16, r > math.MaxInt16 || r < math.MinInt16)
+		}
+	case OpIntTypeSpecified:
+		t := inst.operands[0]
+		v := cpu.Get8(t)
+		cpu.interrupt(v, rt)
+		// FLAGS none affected
+	// <other cases omitted for brevity...>
+	}
+	cpu.RegisterFile[RegIP] += uint16(inst.size)
+}
+```
+
+This function doesn't do error handling, instead it just panics when encountering an unexpected condition.
+There is good reason for this!
+`Step` shouldn't ever receive anything invalid.
+All parsing and validating of input is taken care of at earlier steps, e.g., in the `Fetch` and `Decode` methods.
+
+
+The `Get8`, `Get16`, `Set8`, and `Set16` methods dispatch on the type of the operand and read (or write) data from (or to) the correct place.
+
+```go
+func (cpu *CPU) Get16(opnd Operand) int32 {
+	switch o := opnd.(type) {
+	default:
+		panic(fmt.Errorf("invalid operand: %T", opnd))
+	case Register:
+		if o.width == 0 && o.name >= RegAH && o.name <= RegBH {
+			return int32(int8(cpu.RegisterFile[o.name-RegAH] >> 8))
+		}
+		return int32(int16(cpu.RegisterFile[o.name]))
+	case Memory:
+		addr := o.Addr(cpu)
+		return int32((int16(cpu.Data[addr+1]) << 8) | int16(cpu.Data[addr]))
+	case Immediate:
+		return int32(int16(o.value))
+	case SignedImmediate:
+		return int32(int16(o.value))
+	}
+}
+```
+
+```go
+func (cpu *CPU) Set16(opnd Operand, val int32) {
+	switch o := opnd.(type) {
+	default:
+		panic(fmt.Errorf("invalid operand: %T", opnd))
+	case Register:
+		if o.width == 0 && o.name >= RegAH && o.name <= RegBH {
+			// @fixme: should it even be valid to call Set16 on a 8-bit reg?
+			cpu.RegisterFile[o.name-RegAH] = uint16(val<<8) | (cpu.RegisterFile[o.name-RegAH] & 0x00FF)
+		} else {
+			cpu.RegisterFile[o.name] = uint16(val)
+		}
+	case Memory:
+		addr := o.Addr(cpu)
+		cpu.Data[addr+1] = byte(val >> 8)
+		cpu.Data[addr+0] = byte(val >> 0)
+	}
+}
+```
+
+Note that, whether we're operating on a byte or a word (2 bytes), values are always cast to and from `int32`s.
+`int32`s are used because it makes calculating the `FLAGS` register easier.
+
+For a memory operand, the address has to be calculated based on current register values.
+
+```go
+func BaseOffset(cpu *CPU, i byte, disp int16) uint16 {
+	const RegInv = RegLast + 1
+	type BaseOffset struct {
+		Base, Offset byte
+	}
+	names := []BaseOffset{
+		{RegB, RegSI},
+		{RegB, RegDI},
+		{RegBP, RegSI},
+		{RegBP, RegDI},
+		{RegSI, RegInv},
+		{RegDI, RegInv},
+		{RegBP, RegInv},
+		{RegB, RegInv},
+	}
+	bo := names[i]
+	base := int16(cpu.RegisterFile[bo.Base])
+	offset := int16(0)
+	if bo.Offset <= RegLast {
+		offset = int16(cpu.RegisterFile[bo.Offset])
+	}
+	return uint16(base + offset + disp)
+}
+
+func (mem Memory) Addr(cpu *CPU) uint16 {
+	switch mem.mod {
+	default:
+		panic("unreachable")
+	case 0b00:
+		if mem.rm == 0b110 {
+			return (uint16(mem.dispHigh) << 8) ^ uint16(mem.dispLow)
+		}
+		return BaseOffset(cpu, mem.rm, 0)
+	case 0b01:
+		disp := int16(int8(mem.dispLow))
+		return BaseOffset(cpu, mem.rm, disp)
+	case 0b10:
+		disp := (int16(mem.dispHigh) << 8) ^ int16(mem.dispLow)
+		return BaseOffset(cpu, mem.rm, disp)
+	}
+}
+```
+
+This again, just implements what is explained in this section of the 8086 specification:
+
+![A screenshot from the NOTES section of the last page of the 8086 specification.](./8086_spec_notes.png)
+
+Interrupts are handled by the CPU:
+
+```go
+func (cpu *CPU) interrupt(idx int32, rt Runtime) {
+	vector := [256]func(*CPU){
+		0x20: rt.Syscall, // syscall
+	}
+	f := vector[idx]
+	if f != nil {
+		f(cpu)
+	} else {
+		log.Printf("unhandled interrupt: %02x", idx)
+	}
+}
+```
+
+The only type of interrupt we actually implement is the syscall.
+Syscalls are handled by the `Minix` runtime:
+
+```go
+type Minix struct{}
+
+func (minix Minix) Syscall(cpu *CPU) {
+	noSys := func(*CPU) uint16 {
+		return uint16(EINVAL)
+	}
+	vector := [78]func(*CPU) uint16{
+		0: noSys,
+		1: func(cpu *CPU) uint16 { // exit
+			type Msg struct {
+				source, type_, code uint16
+			}
+			addr := cpu.RegisterFile[RegB]
+			bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
+			msg := (*Msg)(unsafe.Pointer(&bs[0]))
+			if *m {
+				fmt.Printf("<exit(%d)>\n", msg.code)
+			}
+			os.Exit(int(msg.code))
+			return msg.code
+		},
+		// <omitted for brevity...>
+		4: func(cpu *CPU) uint16 { // write
+			type Msg struct {
+				source, type_    uint16
+				fd, len, _, addr uint16
+			}
+			addr := cpu.RegisterFile[RegB]
+			bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
+			msg := (*Msg)(unsafe.Pointer(&bs[0]))
+			if *m {
+				fmt.Printf("<write(%d, 0x%04x, %d)", msg.fd, msg.addr, msg.len)
+			}
+			str := string(cpu.Data[msg.addr : msg.addr+msg.len])
+			fmt.Print(str)
+			ret := len(str)
+			if *m {
+				fmt.Printf(" => %d>\n", ret)
+			}
+			cpu.RegisterFile[RegA] = 0 // ?
+			return uint16(ret)
+		},
+		// <omitted for brevity...>
+		17: func(cpu *CPU) uint16 { // break
+			type Msg struct {
+				source, type_ uint16
+				_             [6]byte
+				address       uint16
+				_             [6]byte
+				reply         uint16
+			}
+			addr := cpu.RegisterFile[RegB]
+			bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
+			msg := (*Msg)(unsafe.Pointer(&bs[0]))
+			if *m {
+				fmt.Printf("<brk(0x%04x) => ", msg.address)
+			}
+			ret := uint16(0)
+			if true { // @todo: checks???
+				cpu.ProgramBreak = msg.address
+				msg.reply = cpu.ProgramBreak
+				if *m {
+					fmt.Printf("0>\n")
+				}
+			} else {
+				ret = uint16(-ENOMEM)
+				msg.reply = 0xFFFF // -1
+				if *m {
+					fmt.Printf("ENOMEM>\n")
+				}
+			}
+			cpu.RegisterFile[RegA] = 0 // ?
+			return ret
+		},
+		// <omitted for brevity...>
+		54: func(cpu *CPU) uint16 { // ioctl
+			type Msg struct {
+				source  uint16
+				type_   uint16
+				fd      uint16
+				_       [2]byte
+				request uint16
+				_       [8]byte
+				address uint16
+			}
+			addr := cpu.RegisterFile[RegB]
+			bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
+			msg := (*Msg)(unsafe.Pointer(&bs[0]))
+			if *m {
+				fmt.Printf("<ioctl(%d, 0x%04x, 0x%04x)>\n", msg.fd, msg.request, msg.address)
+			}
+			cpu.RegisterFile[RegA] = 0 // ?
+			return uint16(-EINVAL)
+		},
+		// <omitted for brevity...>
+	}
+	type Msg struct {
+		source, type_ uint16
+	}
+	addr := cpu.RegisterFile[RegB]
+	bs := cpu.Data[addr : addr+uint16(unsafe.Sizeof(Msg{}))]
+	msg := (*Msg)(unsafe.Pointer(&bs[0]))
+	ret := vector[msg.type_](cpu)
+	msg.type_ = ret
+}
+```
+
+Again, most syscalls are unimplemented.
+We only care about `exit`, `write`, and a stubbed out `break` and `ioctl`.
+
+We define `Msg` structures "on the fly" to cast memory and read out the arguments passed to the syscall.
+Padding within a messega struct is just filled in with `_ [N]byte` for `N` byte padding.
+
+Syscalls set the AX register to 0, as it seems that is what the reference implementation also does.
+
+Output of the interpreter can be diffed against the output of professor FUKUDA Hiroaki's reference implementation:
 
 ```sh
-A=test_programs/1.out MODE=-d ./make_test.sh all
-A=test_programs/1.out MODE=-m ./make_test.sh all
-A=test_programs/1.out MODE=-m LIMIT=200 ./make_test.sh all
+MODE=-m ./make_test.sh all ; echo $?
+A=test_programs/1.out MODE=-m ./make_test.sh
+A=test_programs/1.out MODE=-m LIMIT=200 ./make_test.sh
+
+meld mine.disas other.disas # open in diff viewer
 ```
