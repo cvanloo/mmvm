@@ -15,14 +15,6 @@ import (
 	"unsafe"
 )
 
-// @todo: implement other instructions
-// @todo: implement other syscalls
-// @todo: implement other interrupts? hw?
-// @todo: implement symbol table
-// @todo: implement segmented memory
-// @todo: proper handling of decode errors
-// @todo: https://www.muppetlabs.com/~breadbox/txt/mopb.html
-
 type (
 	// a.out header (format of executable files)
 	// defined in Minix2:SYS/include/a.out.h
@@ -71,12 +63,12 @@ type (
 		width, mod, rm, dispHigh, dispLow byte
 	}
 	// Absolute
-	Address struct { // @todo: do we really need this?
+	Address struct {
 		width byte
 		addr  int16
 	}
 	// Segment:Offset
-	SegmentOffset struct { // @todo: where do we need this?
+	SegmentOffset struct {
 		segment, offset int16
 	}
 	Immediate struct {
@@ -1425,7 +1417,6 @@ func (cpu *CPU) interrupt(idx int32, rt Runtime) {
 }
 
 func (cpu *CPU) Step(rt Runtime, inst Instruction) {
-	// @todo: processor exceptions?
 	isImm := func(opnd Operand) bool {
 		switch opnd.(type) {
 		default:
