@@ -163,7 +163,8 @@ bin := must(os.ReadFile(file))
 ```
 
 <details>
-<summary>`must`</summary>
+<summary>must</summary>
+
 ```go
 func must[T any](t T, err error) T {
 	if err != nil {
